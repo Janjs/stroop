@@ -1,96 +1,132 @@
 'use client'
 
+import { createElement, useEffect, useRef, useState } from 'react'
 import { StrudelSnippet } from '@/types/types'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ExternalLink } from 'lucide-react'
-import {
-  CodeBlock,
-  CodeBlockActions,
-  CodeBlockCopyButton,
-  CodeBlockFilename,
-  CodeBlockHeader,
-  CodeBlockTitle,
-} from '@/components/ai-elements/code-block'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Pause, Play, Square } from 'lucide-react'
+import '@strudel/repl'
 
 interface StrudelCodeViewerProps {
   snippets: StrudelSnippet[]
-  activeIndex: number
-  onSelect: (index: number) => void
   isLoading?: boolean
 }
 
-const StrudelCodeViewer = ({ snippets, activeIndex, onSelect, isLoading = false }: StrudelCodeViewerProps) => {
-  const clampedIndex = Math.min(Math.max(activeIndex, 0), Math.max(snippets.length - 1, 0))
-  const activeSnippet = snippets[clampedIndex]
-  const canOpen = Boolean(activeSnippet?.code)
+type StrudelEditorElement = HTMLElement & {
+  editor?: {
+    setCode?: (code: string) => void
+    evaluate?: () => void
+    start?: () => void
+    stop?: () => void
+  }
+}
 
-  const handleOpenInStrudel = async () => {
-    if (!activeSnippet?.code) return
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(activeSnippet.code)
-      } catch {}
+const normalizeStrudelCode = (code: string) => {
+  const trimmed = code.trim()
+  const hasKnownInvalidPattern = /\bplay\s*\(|\bloop\s*=|\bshape\s*=|\bsynth\s*=|note\(\s*\d/.test(trimmed)
+  if (hasKnownInvalidPattern) {
+    return 'stack(s("bd bd sd bd"), s("hh*8")).fast(1)'
+  }
+  const hasSynthReference = /\bsynth\b/.test(trimmed)
+  const hasSynthDefinition = /\b(const|let|var|function)\s+synth\b/.test(trimmed)
+  if (!hasSynthReference || hasSynthDefinition) return trimmed
+  return `const synth = s\n\n${trimmed}`
+}
+
+const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerProps) => {
+  const activeSnippet = snippets[0]
+  const replRef = useRef<StrudelEditorElement | null>(null)
+  const [isEditorReady, setIsEditorReady] = useState(false)
+
+  useEffect(() => {
+    const styleId = 'strudel-page-lock'
+    const existing = document.getElementById(styleId)
+    if (existing) return
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = `
+      html, body {
+        background: var(--color-background) !important;
+        color: var(--color-foreground) !important;
+      }
+    `
+    document.head.appendChild(style)
+    return () => {
+      style.remove()
     }
-    window.open('https://strudel.cc/', '_blank', 'noopener,noreferrer')
+  }, [])
+
+  useEffect(() => {
+    let frameId = 0
+    const checkReady = () => {
+      if (replRef.current?.editor) {
+        setIsEditorReady(true)
+        return
+      }
+      frameId = window.requestAnimationFrame(checkReady)
+    }
+    frameId = window.requestAnimationFrame(checkReady)
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!activeSnippet?.code) return
+    const repl = replRef.current
+    if (!repl) return
+    const normalizedCode = normalizeStrudelCode(activeSnippet.code)
+    if (repl.editor?.setCode) {
+      repl.editor.setCode(normalizedCode)
+      return
+    }
+    repl.setAttribute('code', normalizedCode)
+  }, [activeSnippet?.code])
+
+  const handlePlay = async () => {
+    const repl = replRef.current
+    if (!repl?.editor) return
+    try {
+      const result = repl.editor.evaluate?.()
+      if (result && typeof (result as Promise<unknown>).then === 'function') {
+        await result
+      }
+      repl.editor.start?.()
+    } catch (error) {
+      console.error('Failed to start Strudel playback:', error)
+    }
+  }
+
+  const handlePause = () => {
+    replRef.current?.editor?.stop?.()
+  }
+
+  const handleStop = () => {
+    replRef.current?.editor?.stop?.()
   }
 
   return (
     <Card className="h-full flex flex-col overflow-hidden">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <CardTitle className="text-base font-semibold">Strudel code</CardTitle>
-            <CardDescription>Generated snippets ready for Strudel.</CardDescription>
-          </div>
-          {snippets.length > 1 && (
-            <Select value={String(clampedIndex)} onValueChange={(value) => onSelect(Number(value))}>
-              <SelectTrigger className="h-8 w-40">
-                <SelectValue placeholder="Select snippet" />
-              </SelectTrigger>
-              <SelectContent>
-                {snippets.map((snippet, index) => (
-                  <SelectItem key={`${snippet.title ?? 'snippet'}-${index}`} value={String(index)}>
-                    {snippet.title ?? `Pattern ${index + 1}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="flex-1 min-h-0 flex flex-col">
+      <CardContent className="flex-1 min-h-0 flex flex-col p-0">
         {snippets.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             {isLoading ? 'Generating Strudel code...' : 'Your Strudel code will appear here.'}
           </div>
         ) : (
-          <CodeBlock code={activeSnippet.code} language="javascript" className="flex-1 min-h-0">
-            <CodeBlockHeader>
-              <CodeBlockTitle>
-                <CodeBlockFilename>{activeSnippet.title ?? `Pattern ${clampedIndex + 1}`}</CodeBlockFilename>
-              </CodeBlockTitle>
-              <CodeBlockActions>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleOpenInStrudel}
-                  disabled={!canOpen}
-                >
-                  <ExternalLink />
-                  Open in Strudel
-                </Button>
-                <CodeBlockCopyButton />
-              </CodeBlockActions>
-            </CodeBlockHeader>
-          </CodeBlock>
+          <>
+            {createElement('strudel-editor', { ref: replRef, className: 'w-full h-64 flex-none overflow-hidden' })}
+            <div className="flex items-center justify-end gap-2 px-4 py-3 flex-none">
+              <Button variant="outline" size="icon" onClick={handleStop} aria-label="Stop" disabled={!isEditorReady}>
+                <Square className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={handlePause} aria-label="Pause" disabled={!isEditorReady}>
+                <Pause className="h-4 w-4" />
+              </Button>
+              <Button size="icon" onClick={handlePlay} aria-label="Play" disabled={!isEditorReady}>
+                <Play className="h-4 w-4" />
+              </Button>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

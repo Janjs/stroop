@@ -76,13 +76,13 @@ async function collectStreamForCache(stream: ReadableStream): Promise<string> {
 }
 
 const generateStrudelCodeTool = tool({
-  description: 'Generate Strudel code snippets based on a description. The description can include mood, genre, tempo, or style. Returns a list of Strudel code snippets.',
+  description: 'Generate a single Strudel code snippet based on a description. The description can include mood, genre, tempo, or style.',
   inputSchema: z.object({
     description: z.string().describe('The description or style of Strudel snippets to generate (e.g., "dreamy lo-fi beat at 90 bpm")'),
   }),
   execute: async ({ description }) => {
     const prompt = `Generate Strudel code snippets that fit the following description: ${description}`
-    const fullPrompt = `Generate 3-5 Strudel code snippets based on the user's request. Each snippet should be valid Strudel code and playable as-is.\n\nUser request: ${prompt}`
+    const fullPrompt = `Generate 1 Strudel code snippet based on the user's request. The snippet should be valid Strudel code and playable as-is. Output a single Strudel expression (no variable assignments, no play(), no loop, no comments). Use Strudel built-ins like s(), note(), stack(), fast(), slow(), gain(), lpf(), hpf(), room(), size(), pan(); do not use synth or any undefined globals.\n\nUser request: ${prompt}`
 
     const toolCacheKey = createHash('sha256').update(fullPrompt).digest('hex')
 

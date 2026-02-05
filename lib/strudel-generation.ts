@@ -7,7 +7,7 @@ export const StrudelSnippetsSchema = z.object({
       title: z.string().min(1),
       code: z.string().min(1),
     })
-  ).describe('3-5 strudel code snippets with titles'),
+  ).length(1).describe('1 strudel code snippet with a title'),
 })
 
 export const parseStrudelSnippets = (data: z.infer<typeof StrudelSnippetsSchema>): StrudelSnippet[] => {

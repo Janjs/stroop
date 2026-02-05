@@ -48,7 +48,6 @@ const GenerateContent = () => {
   const searchParams = useSearchParams()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
-  const [activeSnippetIndex, setActiveSnippetIndex] = useState(0)
 
   const prompt = searchParams.get('prompt') || undefined
   const chatId = searchParams.get('chatId') || undefined
@@ -64,7 +63,6 @@ const GenerateContent = () => {
 
     if (isChatSwitch || isNewChat || isReset) {
       setSnippets([])
-      setActiveSnippetIndex(0)
       setError(null)
     }
 
@@ -72,41 +70,8 @@ const GenerateContent = () => {
     prevNewParamRef.current = newParam
   }, [chatId, newParam])
 
-  const handleSnippetsGenerated = (newSnippets: StrudelSnippet[], shouldReplace: boolean = false) => {
-    setSnippets((prevSnippets) => {
-      let combined: StrudelSnippet[]
-
-      if (shouldReplace) {
-        combined = newSnippets
-      } else {
-        const prevSlice = prevSnippets.slice(-newSnippets.length)
-        const isDuplicate = prevSlice.length === newSnippets.length &&
-          JSON.stringify(prevSlice) === JSON.stringify(newSnippets)
-
-        if (isDuplicate) {
-          return prevSnippets
-        }
-
-        combined = [...prevSnippets, ...newSnippets]
-      }
-
-      const limited = combined.slice(-20)
-
-      const totalCombined = combined.length
-      const prevLen = prevSnippets.length
-
-      if (shouldReplace) {
-        setActiveSnippetIndex(0)
-        return limited
-      }
-
-      const firstNewIndexInCombined = prevLen
-      const firstIndexInLimited = Math.max(0, firstNewIndexInCombined - (totalCombined - limited.length))
-
-      setActiveSnippetIndex(firstIndexInLimited)
-
-      return limited
-    })
+  const handleSnippetsGenerated = (newSnippets: StrudelSnippet[], _shouldReplace: boolean = false) => {
+    setSnippets(newSnippets.slice(-1))
     setError(null)
   }
 
@@ -127,8 +92,6 @@ const GenerateContent = () => {
   const codeViewer = (
     <StrudelCodeViewer
       snippets={snippets}
-      activeIndex={activeSnippetIndex}
-      onSelect={setActiveSnippetIndex}
       isLoading={snippets.length === 0 && !!prompt && !error}
     />
   )
