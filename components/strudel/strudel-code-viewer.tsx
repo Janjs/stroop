@@ -4,7 +4,7 @@ import { createElement, useEffect, useRef, useState } from 'react'
 import { StrudelSnippet } from '@/types/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Pause, Play } from 'lucide-react'
+import { Check, Copy, Pause, Play } from 'lucide-react'
 import '@strudel/repl'
 import { useTheme } from 'next-themes'
 
@@ -39,6 +39,8 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
   const replRef = useRef<StrudelEditorElement | null>(null)
   const [isEditorReady, setIsEditorReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [hasCopied, setHasCopied] = useState(false)
+  const copyTimeoutRef = useRef<number | null>(null)
   const { resolvedTheme } = useTheme()
   const baseHtmlClassesRef = useRef<string[]>([])
   const lockedThemeVarsRef = useRef<Record<string, string>>({})
@@ -147,6 +149,14 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
   }, [])
 
   useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (!activeSnippet?.code) return
     const repl = replRef.current
     if (!repl) return
@@ -188,6 +198,22 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
     }
   }
 
+  const handleCopy = async () => {
+    if (!activeSnippet?.code) return
+    try {
+      await navigator.clipboard.writeText(activeSnippet.code)
+      setHasCopied(true)
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current)
+      }
+      copyTimeoutRef.current = window.setTimeout(() => {
+        setHasCopied(false)
+      }, 1500)
+    } catch (error) {
+      console.error('Failed to copy Strudel code:', error)
+    }
+  }
+
   return (
     <Card className="h-full flex flex-col overflow-hidden">
       <CardContent className="flex-1 min-h-0 flex flex-col p-0">
@@ -198,7 +224,11 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
         ) : (
           <>
             {createElement('strudel-editor', { ref: replRef, className: 'w-full flex-none h-0 min-h-0 overflow-hidden' })}
-            <div className="flex items-center justify-end px-4 py-3 flex-none">
+            <div className="flex items-center justify-end gap-2 px-4 py-3 flex-none">
+              <Button variant="outline" onClick={handleCopy} aria-label="Copy code" disabled={!activeSnippet?.code}>
+                {hasCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {hasCopied ? 'Copied' : 'Copy'}
+              </Button>
               <Button onClick={handleTogglePlayback} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isEditorReady}>
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                 {isPlaying ? 'Pause' : 'Play'}
