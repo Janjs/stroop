@@ -214,8 +214,10 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, resetK
         strudelThemeSourceRef.current = themeEl.textContent
         themeEl.textContent = ''
       }
-      const pct = resolvedTheme === 'dark' ? '35' : '80'
-      const pastel = (color: string) => `color-mix(in oklab, ${color} ${pct}%, ${bg})`
+      const isDark = resolvedTheme === 'dark'
+      const pastel = (color: string) => isDark
+        ? `color-mix(in oklab, ${color} 40%, ${fg})`
+        : `color-mix(in oklab, ${color} 70%, ${fg})`
       const palette = [
         pastel(primary),
         pastel(accentColor),
@@ -250,7 +252,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, resetK
         styleEl.id = id
       }
       styleEl.textContent = `
-#strudel-repl-container .cm-editor,#strudel-repl-container .cm-scroller,#strudel-repl-container .cm-content,#strudel-repl-container .cm-line{font-family:${fontMono};}
+#strudel-repl-container .cm-editor,#strudel-repl-container .cm-scroller,#strudel-repl-container .cm-content,#strudel-repl-container .cm-line{font-family:${fontMono};font-weight:500;}
 #strudel-repl-container .cm-editor{background-color:${bg} !important;color:${fg} !important;border-radius:${radius};}
 #strudel-repl-container .cm-scroller{background-color:${bg} !important;}
 #strudel-repl-container .cm-content{color:${fg} !important;}
