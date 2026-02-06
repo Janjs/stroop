@@ -4,6 +4,7 @@ import { createElement, useEffect, useRef, useState } from 'react'
 import { StrudelSnippet } from '@/types/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Check, Copy, Pause, Play } from 'lucide-react'
 import '@strudel/repl'
 import { useTheme } from 'next-themes'
@@ -16,22 +17,83 @@ interface StrudelCodeViewerProps {
 type StrudelEditorElement = HTMLElement & {
   editor?: {
     setCode?: (code: string) => void
-    evaluate?: () => void
+    evaluate?: (autostart?: boolean) => void | Promise<unknown>
     start?: () => void
     stop?: () => void
+    flash?: (ms?: number, range?: { from: number; to: number }) => void
+    setCursorLocation?: (col: number) => void
   }
 }
 
 const normalizeStrudelCode = (code: string) => {
-  const trimmed = code.trim()
-  const hasKnownInvalidPattern = /\bplay\s*\(|\bloop\s*=|\bshape\s*=|\bsynth\s*=|note\(\s*\d/.test(trimmed)
-  if (hasKnownInvalidPattern) {
-    return 'stack(s("bd bd sd bd"), s("hh*8")).fast(1)'
+  let next = code.trim()
+  for (let i = 0; i < 3; i += 1) {
+    const hasKnownInvalidPattern = /\bplay\s*\(|\bloop\s*=|\bshape\s*=|\bsynth\s*=|note\(\s*\d/.test(next)
+    if (hasKnownInvalidPattern) {
+      return 'stack(s("bd bd sd bd"), s("hh*8")).fast(1)'
+    }
+    const hasSynthReference = /\bsynth\b/.test(next)
+    const hasSynthDefinition = /\b(const|let|var|function)\s+synth\b/.test(next)
+    const normalized = !hasSynthReference || hasSynthDefinition ? next : `const synth = s\n\n${next}`
+    if (normalized === next) return normalized
+    next = normalized
   }
-  const hasSynthReference = /\bsynth\b/.test(trimmed)
-  const hasSynthDefinition = /\b(const|let|var|function)\s+synth\b/.test(trimmed)
-  if (!hasSynthReference || hasSynthDefinition) return trimmed
-  return `const synth = s\n\n${trimmed}`
+  return next
+}
+
+const getOffsetFromLineColumn = (code: string, line: number, column: number) => {
+  if (line <= 0) return 0
+  const lines = code.split('\n')
+  const safeLine = Math.min(line, lines.length)
+  let offset = 0
+  for (let i = 0; i < safeLine - 1; i += 1) {
+    offset += lines[i].length + 1
+  }
+  return Math.min(offset + Math.max(column, 0), code.length)
+}
+
+const getErrorRange = (error: unknown, code: string) => {
+  if (!code || typeof error !== 'object' || error === null) return null
+  const err = error as {
+    pos?: number
+    start?: number | { offset?: number }
+    end?: number | { offset?: number }
+    loc?: { line?: number; column?: number; start?: { offset?: number } }
+    location?: { start?: { offset?: number; line?: number; column?: number }; end?: { offset?: number } }
+    line?: number
+    column?: number
+  }
+
+  const startOffset =
+    (typeof err.location?.start?.offset === 'number' ? err.location.start.offset : undefined) ??
+    (typeof err.loc?.start?.offset === 'number' ? err.loc.start.offset : undefined) ??
+    (typeof err.start === 'number' ? err.start : undefined) ??
+    (typeof err.start === 'object' && typeof err.start.offset === 'number' ? err.start.offset : undefined) ??
+    (typeof err.pos === 'number' ? err.pos : undefined)
+
+  const endOffset =
+    (typeof err.location?.end?.offset === 'number' ? err.location.end.offset : undefined) ??
+    (typeof err.end === 'number' ? err.end : undefined) ??
+    (typeof err.end === 'object' && typeof err.end.offset === 'number' ? err.end.offset : undefined)
+
+  if (typeof startOffset === 'number') {
+    const from = Math.min(Math.max(startOffset, 0), code.length)
+    const to =
+      typeof endOffset === 'number'
+        ? Math.min(Math.max(endOffset, from + 1), code.length)
+        : Math.min(from + 1, code.length)
+    return { from, to }
+  }
+
+  const line = err.loc?.line ?? err.location?.start?.line ?? err.line
+  const column = err.loc?.column ?? err.location?.start?.column ?? err.column
+  if (typeof line === 'number' && typeof column === 'number') {
+    const from = getOffsetFromLineColumn(code, line, column)
+    const to = Math.min(from + 1, code.length)
+    return { from, to }
+  }
+
+  return null
 }
 
 const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerProps) => {
@@ -40,10 +102,12 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
   const [isEditorReady, setIsEditorReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [hasCopied, setHasCopied] = useState(false)
+  const [replError, setReplError] = useState<{ message: string; range?: { from: number; to: number } } | null>(null)
   const copyTimeoutRef = useRef<number | null>(null)
   const { resolvedTheme } = useTheme()
   const baseHtmlClassesRef = useRef<string[]>([])
   const lockedThemeVarsRef = useRef<Record<string, string>>({})
+  const lastErrorKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     const styleId = 'strudel-page-lock'
@@ -170,13 +234,47 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
       repl.editor?.stop?.()
       setIsPlaying(false)
     }
+    setReplError(null)
     window.requestAnimationFrame(() => {
       const scroller = repl.shadowRoot?.querySelector('.cm-scroller')
       if (scroller instanceof HTMLElement) {
         scroller.scrollTop = 0
       }
     })
+    window.requestAnimationFrame(() => {
+      void repl.editor?.evaluate?.(false)
+    })
   }, [activeSnippet?.code])
+
+  useEffect(() => {
+    const repl = replRef.current
+    if (!repl) return
+    const handleUpdate = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { error?: unknown; code?: string } | undefined
+      const error = detail?.error
+      if (!error) {
+        lastErrorKeyRef.current = null
+        setReplError(null)
+        return
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      const code = detail?.code ?? ''
+      const range = getErrorRange(error, code) ?? undefined
+      const errorKey = `${message}:${range ? `${range.from}-${range.to}` : 'none'}`
+      repl.editor?.stop?.()
+      setIsPlaying(false)
+      setReplError({ message, range })
+      if (errorKey !== lastErrorKeyRef.current) {
+        lastErrorKeyRef.current = errorKey
+        if (range) {
+          repl.editor?.setCursorLocation?.(range.from)
+          repl.editor?.flash?.(900, range)
+        }
+      }
+    }
+    repl.addEventListener('update', handleUpdate)
+    return () => repl.removeEventListener('update', handleUpdate)
+  }, [isEditorReady])
 
   const handleTogglePlayback = async () => {
     const repl = replRef.current
@@ -224,12 +322,24 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
         ) : (
           <>
             {createElement('strudel-editor', { ref: replRef, className: 'w-full flex-none h-0 min-h-0 overflow-hidden' })}
+            {replError ? (
+              <div className="px-4 pb-3">
+                <Alert variant="destructive">
+                  <AlertTitle>Strudel syntax error</AlertTitle>
+                  <AlertDescription>{replError.message}</AlertDescription>
+                </Alert>
+              </div>
+            ) : null}
             <div className="flex items-center justify-end gap-2 px-4 py-3 flex-none">
               <Button variant="outline" onClick={handleCopy} aria-label="Copy code" disabled={!activeSnippet?.code}>
                 {hasCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {hasCopied ? 'Copied' : 'Copy'}
               </Button>
-              <Button onClick={handleTogglePlayback} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isEditorReady}>
+              <Button
+                onClick={handleTogglePlayback}
+                aria-label={isPlaying ? 'Pause' : 'Play'}
+                disabled={!isEditorReady || Boolean(replError)}
+              >
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                 {isPlaying ? 'Pause' : 'Play'}
               </Button>
