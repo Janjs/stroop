@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { StrudelSnippet } from '@/types/types'
 import { Alert, AlertTitle } from '@/components/ui/alert'
+import { Card, CardContent } from '@/components/ui/card'
 import { Icons } from '@/components/icons'
 import Chatbot from '@/components/generate-new/chatbot'
 import { useSearchParams } from 'next/navigation'
@@ -45,6 +46,7 @@ const parseSnippetsFromOutput = (output: unknown): StrudelSnippet[] | null => {
 const GenerateContent = () => {
   const [snippets, setSnippets] = useState<StrudelSnippet[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [compileError, setCompileError] = useState<{ message: string; code: string; id: number } | null>(null)
   const searchParams = useSearchParams()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -54,16 +56,20 @@ const GenerateContent = () => {
 
   const prevChatIdRef = useRef<string | undefined>(undefined)
   const prevNewParamRef = useRef<string | null>(null)
+  const hasInitializedRef = useRef(false)
   const newParam = searchParams.get('new')
+  const viewerKey = `${chatId ?? 'new'}-${newParam ?? 'none'}`
 
   useEffect(() => {
-    const isChatSwitch = prevChatIdRef.current && chatId && prevChatIdRef.current !== chatId
-    const isNewChat = prevChatIdRef.current && !chatId
-    const isReset = newParam && newParam !== prevNewParamRef.current
-
-    if (isChatSwitch || isNewChat || isReset) {
-      setSnippets([])
-      setError(null)
+    if (hasInitializedRef.current) {
+      const isChatChange = prevChatIdRef.current !== chatId
+      const isReset = newParam && newParam !== prevNewParamRef.current
+      if (isChatChange || isReset) {
+        setSnippets([])
+        setError(null)
+      }
+    } else {
+      hasInitializedRef.current = true
     }
 
     prevChatIdRef.current = chatId
@@ -79,6 +85,10 @@ const GenerateContent = () => {
     setError(message)
   }
 
+  const handleCompileError = (message: string, code: string) => {
+    setCompileError({ message, code, id: Date.now() })
+  }
+
   const handleToolClick = (_toolName: string, output: unknown) => {
     const result = parseSnippetsFromOutput(output)
     if (result && result.length > 0) {
@@ -89,11 +99,24 @@ const GenerateContent = () => {
     }
   }
 
-  const codeViewer = (
+  const showEditor = Boolean(snippets[0]?.code?.trim())
+
+  const codeViewer = showEditor ? (
     <StrudelCodeViewer
+      key={viewerKey}
       snippets={snippets}
       isLoading={snippets.length === 0 && !!prompt && !error}
+      onCompileError={handleCompileError}
+      resetKey={searchParams.get('new')}
     />
+  ) : (
+    <Card className="h-full flex flex-col overflow-hidden">
+      <CardContent className="flex-1 min-h-0 flex flex-col p-0">
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+          {snippets.length === 0 && !!prompt && !error ? 'Generating Strudel code...' : 'Your Strudel code will appear here.'}
+        </div>
+      </CardContent>
+    </Card>
   )
 
   return (
@@ -110,6 +133,7 @@ const GenerateContent = () => {
           chatId={chatId}
           onSnippetsGenerated={handleSnippetsGenerated}
           onToolError={handleToolError}
+          compileError={compileError}
           resetKey={searchParams.get('new')}
           onToolClick={handleToolClick}
         />

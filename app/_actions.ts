@@ -17,7 +17,7 @@ export const generateStrudelSnippets = async (
 
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o-mini'),
+      model: openai('gpt-5.2'),
       schema: StrudelSnippetsSchema,
       prompt: `Generate 1 Strudel code snippet based on the user's request. The snippet should be valid Strudel code and playable as-is.\n\nUser request: ${userInput.prompt}`,
     })

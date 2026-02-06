@@ -265,11 +265,12 @@ interface ChatbotProps {
   onSnippetsGenerated?: (snippets: StrudelSnippet[], shouldReplace?: boolean) => void
   onToolError?: (message: string) => void
   onChatCreated?: (chatId: string) => void
+  compileError?: { message: string; code: string; id: number } | null
   resetKey?: string | null
   onToolClick?: (toolName: string, output: any) => void
 }
 
-function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, resetKey, onToolClick }: ChatbotProps) {
+function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, resetKey, onToolClick }: ChatbotProps) {
   const [selectedMood, setSelectedMood] = useState<string | null>(null)
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
@@ -280,6 +281,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const currentChatIdRef = useRef<string | null>(chatId || null)
   const lastSavedMessagesLengthRef = useRef<number>(0)
   const lastSubmittedPromptRef = useRef<string | null>(null)
+  const lastHandledCompileErrorIdRef = useRef<number | null>(null)
+  const compileRetryCountRef = useRef(0)
+  const lastCompileErrorCodeRef = useRef<string | null>(null)
+  const lastSnippetScopeKeyRef = useRef<string | null>(null)
 
   const [isTyping, setIsTyping] = useState(false)
 
@@ -402,6 +407,13 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   } as any)
 
   useEffect(() => {
+    const snippetScopeKey = `${chatId || 'new'}:${resetKey || 'none'}`
+    if (lastSnippetScopeKeyRef.current !== snippetScopeKey) {
+      lastSnippetScopeKeyRef.current = snippetScopeKey
+      if (messages.length === 0) {
+        return
+      }
+    }
     for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
       const message = messages[messageIndex]
       if (!message || message.role !== 'assistant') {
@@ -461,7 +473,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         }
       }
     }
-  }, [messages, onSnippetsGenerated, onToolError])
+  }, [messages, onSnippetsGenerated, onToolError, chatId, resetKey])
 
   // Load existing chat
   useEffect(() => {
@@ -529,7 +541,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       setIsSuggestionsOpen(false)
       sendMessage(
         { text: externalPrompt },
-        { body: { model: 'gpt-4o' } }
+        { body: { model: 'gpt-5.2' } }
       )
     }
   }, [externalPrompt, status, sendMessage, messages.length, existingChat, chatId])
@@ -544,6 +556,36 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
   }, [messages, status])
 
+  useEffect(() => {
+    if (!compileError || status !== 'ready') return
+    if (lastHandledCompileErrorIdRef.current === compileError.id) return
+    if (lastCompileErrorCodeRef.current === compileError.code && compileRetryCountRef.current >= 1) {
+      return
+    }
+    lastHandledCompileErrorIdRef.current = compileError.id
+    if (lastCompileErrorCodeRef.current !== compileError.code) {
+      lastCompileErrorCodeRef.current = compileError.code
+      compileRetryCountRef.current = 0
+    }
+    compileRetryCountRef.current += 1
+
+    const lastUserMessage = [...messages].reverse().find((message) => message?.role === 'user')
+    const lastUserText =
+      (lastUserMessage && 'content' in lastUserMessage ? String((lastUserMessage as any).content || '') : '') ||
+      lastSubmittedPromptRef.current ||
+      externalPrompt ||
+      ''
+    const retryPrompt = [
+      'The generated Strudel code failed to compile.',
+      `Error: ${compileError.message}`,
+      lastUserText ? `Original request: ${lastUserText}` : 'Please regenerate a valid Strudel snippet.',
+    ].join('\n')
+    sendMessage(
+      { text: retryPrompt },
+      { body: { model: 'gpt-5.2' } }
+    )
+  }, [compileError, status, messages, externalPrompt, sendMessage])
+
   // Reset chat when resetKey changes (New Chat for anonymous users)
   const lastResetKeyRef = useRef<string | null>(null)
   useEffect(() => {
@@ -552,8 +594,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       setMessages([])
       setError(null)
       setIsSuggestionsOpen(true)
+      onSnippetsGenerated?.([], true)
       // Reset current chat ID too if we want to force full reset
       currentChatIdRef.current = null
+      lastSnippetScopeKeyRef.current = null
 
       // Clear input and suggestions
       textInput.setInput('')
@@ -711,7 +755,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       { text: textToSend },
       {
         body: {
-          model: 'gpt-4o',
+          model: 'gpt-5.2',
         },
       }
     )

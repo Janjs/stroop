@@ -5,10 +5,22 @@ import { parseStrudelSnippets, StrudelSnippetsSchema } from '@/lib/strudel-gener
 import { createHash } from 'crypto'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '@/convex/_generated/api'
+import { readFile } from 'fs/promises'
+import path from 'path'
 
 export const maxDuration = 30
 
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
+let strudelGuideCache: string | null = null
+
+async function getStrudelGuide(): Promise<string> {
+  if (strudelGuideCache) {
+    return strudelGuideCache
+  }
+  const guidePath = path.join(process.cwd(), 'docs', 'strudel-code-guide.md')
+  strudelGuideCache = await readFile(guidePath, 'utf8')
+  return strudelGuideCache
+}
 
 function generateCacheKey(messages: UIMessage[], model: string): string {
   const keyData = JSON.stringify({ messages, model })
@@ -104,7 +116,7 @@ const generateStrudelCodeTool = tool({
 
     try {
       const { object } = await generateObject({
-        model: openaiProvider('gpt-4o-mini'),
+        model: openaiProvider('gpt-5.2'),
         schema: StrudelSnippetsSchema,
         prompt: fullPrompt,
       })
@@ -143,7 +155,7 @@ export async function POST(req: Request) {
   try {
     const {
       messages,
-      model = 'gpt-4o',
+      model = 'gpt-5.2',
     }: {
       messages: UIMessage[]
       model?: string
@@ -170,16 +182,25 @@ export async function POST(req: Request) {
       })
     }
 
-    const result = streamText({
-      model: openaiProvider(model),
-      messages: await convertToModelMessages(messages),
-      system: `You are a helpful assistant that generates Strudel code based on user requests. 
+    const strudelGuide = await getStrudelGuide()
+    const systemPrompt = `You are a helpful assistant that generates Strudel code based on user requests.
+Use the Strudel guide below as the source of truth for syntax and capabilities.
+
+Strudel guide:
+${strudelGuide}
+
 When users ask for Strudel code, you should:
-1. First, provide a brief response acknowledging their request and explaining what you're about to do.
+1. First, provide a brief response acknowledging their request and explaining what you are about to do.
 2. Then use the generateStrudelCode tool to create the snippets. The description should include any relevant details like mood, genre, tempo, or style mentioned by the user.
 3. After the tool completes, provide a detailed explanation of what was created and how the Strudel code is structured.
 
-Always include text before and after calling the tool to create a natural conversation flow.`,
+If you are generating any Strudel code, you must call the generateStrudelCode tool and never output Strudel code directly without a tool call.
+Always include text before and after calling the tool to create a natural conversation flow.`
+
+    const result = streamText({
+      model: openaiProvider(model),
+      messages: await convertToModelMessages(messages),
+      system: systemPrompt,
       tools: {
         generateStrudelCode: generateStrudelCodeTool,
       },

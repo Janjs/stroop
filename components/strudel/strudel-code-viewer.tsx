@@ -12,6 +12,8 @@ import { useTheme } from 'next-themes'
 interface StrudelCodeViewerProps {
   snippets: StrudelSnippet[]
   isLoading?: boolean
+  onCompileError?: (message: string, code: string) => void
+  resetKey?: string | null
 }
 
 type StrudelEditorElement = HTMLElement & {
@@ -28,10 +30,6 @@ type StrudelEditorElement = HTMLElement & {
 const normalizeStrudelCode = (code: string) => {
   let next = code.trim()
   for (let i = 0; i < 3; i += 1) {
-    const hasKnownInvalidPattern = /\bplay\s*\(|\bloop\s*=|\bshape\s*=|\bsynth\s*=|note\(\s*\d/.test(next)
-    if (hasKnownInvalidPattern) {
-      return 'stack(s("bd bd sd bd"), s("hh*8")).fast(1)'
-    }
     const hasSynthReference = /\bsynth\b/.test(next)
     const hasSynthDefinition = /\b(const|let|var|function)\s+synth\b/.test(next)
     const normalized = !hasSynthReference || hasSynthDefinition ? next : `const synth = s\n\n${next}`
@@ -96,8 +94,11 @@ const getErrorRange = (error: unknown, code: string) => {
   return null
 }
 
-const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerProps) => {
+const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, resetKey }: StrudelCodeViewerProps) => {
   const activeSnippet = snippets[0]
+  const hasSnippet = Boolean(activeSnippet?.code?.trim())
+  const [isCleared, setIsCleared] = useState(false)
+  const lastResetKeyRef = useRef<string | null | undefined>(undefined)
   const replRef = useRef<StrudelEditorElement | null>(null)
   const [isEditorReady, setIsEditorReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -108,6 +109,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
   const baseHtmlClassesRef = useRef<string[]>([])
   const lockedThemeVarsRef = useRef<Record<string, string>>({})
   const lastErrorKeyRef = useRef<string | null>(null)
+  const lastCompileErrorKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     const styleId = 'strudel-page-lock'
@@ -221,9 +223,20 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
   }, [])
 
   useEffect(() => {
-    if (!activeSnippet?.code) return
     const repl = replRef.current
     if (!repl) return
+    if (!activeSnippet?.code) {
+      if (repl.editor?.setCode) {
+        repl.editor.setCode('')
+        repl.editor.stop?.()
+      } else {
+        repl.setAttribute('code', '')
+        repl.editor?.stop?.()
+      }
+      setIsPlaying(false)
+      setReplError(null)
+      return
+    }
     const normalizedCode = normalizeStrudelCode(activeSnippet.code)
     if (repl.editor?.setCode) {
       repl.editor.setCode(normalizedCode)
@@ -242,9 +255,61 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
       }
     })
     window.requestAnimationFrame(() => {
-      void repl.editor?.evaluate?.(false)
+      if (!normalizedCode.trim()) return
+      if (!repl.editor) return
+      try {
+        const result = repl.editor.evaluate?.(false)
+        if (result && typeof (result as Promise<unknown>).then === 'function') {
+          void (result as Promise<unknown>).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error)
+            if (!message.toLowerCase().includes('no code to evaluate')) {
+              throw error
+            }
+          })
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!message.toLowerCase().includes('no code to evaluate')) {
+          throw error
+        }
+      }
     })
-  }, [activeSnippet?.code])
+  }, [activeSnippet?.code, isEditorReady])
+
+  useEffect(() => {
+    const repl = replRef.current
+    if (!repl) return
+    if (repl.editor?.setCode) {
+      repl.editor.setCode('')
+      repl.editor.stop?.()
+    } else {
+      repl.setAttribute('code', '')
+      repl.editor?.stop?.()
+    }
+    setIsPlaying(false)
+    setReplError(null)
+  }, [resetKey])
+
+  useEffect(() => {
+    if (resetKey !== lastResetKeyRef.current) {
+      lastResetKeyRef.current = resetKey
+      setIsCleared(true)
+    }
+  }, [resetKey])
+
+  useEffect(() => {
+    if (hasSnippet) {
+      setIsCleared(false)
+    }
+  }, [hasSnippet, activeSnippet?.code])
+
+  useEffect(() => {
+    if (!replError || !activeSnippet?.code || !onCompileError) return
+    const errorKey = `${replError.message}:${activeSnippet.code}`
+    if (lastCompileErrorKeyRef.current === errorKey) return
+    lastCompileErrorKeyRef.current = errorKey
+    onCompileError(replError.message, activeSnippet.code)
+  }, [replError, activeSnippet?.code, onCompileError])
 
   useEffect(() => {
     const repl = replRef.current
@@ -315,7 +380,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false }: StrudelCodeViewerPro
   return (
     <Card className="h-full flex flex-col overflow-hidden">
       <CardContent className="flex-1 min-h-0 flex flex-col p-0">
-        {snippets.length === 0 ? (
+        {!hasSnippet || isCleared ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             {isLoading ? 'Generating Strudel code...' : 'Your Strudel code will appear here.'}
           </div>
