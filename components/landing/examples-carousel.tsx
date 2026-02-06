@@ -188,18 +188,18 @@ stack(
   s("bd*2,[~ hh]*2,~ cp")
   .bank('RolandTR909')
 )`,
-    fullCode: `await loadOrc('github:kunstmusik/csound-live-code/master/livecode.orc')
-
-stack(
+    fullCode: `stack(
   chord("<C^7 A7 Dm7 Fm7>/2").dict('lefthand').voicing()
   .cutoff(sine.range(500,2000).round().slow(16))
-  .euclidLegato(3,8).csound('FM1')
+  .euclidLegato(3,8).s('sawtooth').gain(0.35)
+  .lpf(1200).room(0.3)
   ,
-  note("<C2 A1 D2 F2>/2").ply(8).csound('Bass').gain("1 4 1 4")
+  note("<C2 A1 D2 F2>/2").ply(8).s('sawtooth').gain("0.3 0.5 0.3 0.5")
+  .cutoff(400).lpf(800)
   ,
   n("0 7 [4 3] 2".fast(2/3).off(".25 .125", add("<2 4 -3 -1>"))
   .slow(2).scale('A4 minor'))
-  .clip(.25).csound('SynHarp')
+  .clip(.25).s('triangle').gain(0.5).delay(0.2).delayfeedback(0.3)
   ,
   s("bd*2,[~ hh]*2,~ cp").bank('RolandTR909')
 )`,
