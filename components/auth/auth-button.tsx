@@ -19,6 +19,7 @@ import { Icons } from '@/components/icons'
 import { useTheme } from 'next-themes'
 import { Badge } from '@/components/ui/badge'
 import About from '@/components/about'
+import ModeToggle from '@/components/mode-toggle'
 import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 
 export function AuthButton() {
@@ -140,7 +141,8 @@ export function AuthButton() {
   return (
     <div className="flex gap-2 items-center">
       <About variant="icon" />
-      <Button size="sm" className="h-8" onClick={handleSignIn}>
+      <ModeToggle />
+      <Button onClick={handleSignIn}>
         Sign In
       </Button>
     </div>

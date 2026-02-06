@@ -330,3 +330,20 @@
 .font-outfit {
   font-family: var(--font-outfit);
 }
+
+strudel-editor + div {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+strudel-editor + div .cm-editor,
+strudel-editor + div .cm-scroller {
+  height: 100%;
+}
+
+strudel-editor + div .cm-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+}

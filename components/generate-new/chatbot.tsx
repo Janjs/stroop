@@ -512,6 +512,17 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   // Auto-send external prompt when provided
   const lastExternalPromptRef = useRef<string | undefined>(undefined)
   useEffect(() => {
+    const hasMessages = messages.length > 0
+    const hasExistingChatMessages = Boolean(existingChat?.messages && existingChat.messages.length > 0)
+
+    if (hasMessages || hasExistingChatMessages) {
+      return
+    }
+
+    if (chatId) {
+      return
+    }
+
     if (externalPrompt && externalPrompt !== lastExternalPromptRef.current && status === 'ready') {
       lastExternalPromptRef.current = externalPrompt
       setError(null)
@@ -521,7 +532,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         { body: { model: 'gpt-4o' } }
       )
     }
-  }, [externalPrompt, status, sendMessage])
+  }, [externalPrompt, status, sendMessage, messages.length, existingChat, chatId])
 
   useEffect(() => {
     if (status === 'streaming') {

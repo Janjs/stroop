@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { cookies } from 'next/headers'
 import Header from './header'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -21,7 +22,11 @@ const outfit = Outfit({
   variable: '--font-outfit',
 })
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies()
+  const sidebarState = cookieStore.get('sidebar_state')?.value
+  const defaultOpen = sidebarState ? sidebarState === 'true' : false
+
   return (
     <html lang="en" suppressHydrationWarning className={outfit.variable}>
       <head>
@@ -35,7 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ConvexAuthNextjsServerProvider apiRoute="/api/auth">
           <ConvexClientProvider>
             <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-              <SidebarProvider defaultOpen={false} style={{ '--sidebar-width': '13rem' } as React.CSSProperties}>
+              <SidebarProvider defaultOpen={defaultOpen} style={{ '--sidebar-width': '13rem' } as React.CSSProperties}>
                 <AppSidebar />
                 <SidebarInset>
                   <div className="h-[100dvh] flex flex-col min-w-0">
