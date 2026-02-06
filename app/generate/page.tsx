@@ -47,6 +47,7 @@ const GenerateContent = () => {
   const [snippets, setSnippets] = useState<StrudelSnippet[]>([])
   const [error, setError] = useState<string | null>(null)
   const [compileError, setCompileError] = useState<{ message: string; code: string; id: number } | null>(null)
+  const [fixRequest, setFixRequest] = useState<{ message: string; code: string; id: number } | null>(null)
   const searchParams = useSearchParams()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -89,6 +90,10 @@ const GenerateContent = () => {
     setCompileError({ message, code, id: Date.now() })
   }
 
+  const handleFixInChat = (message: string, code: string) => {
+    setFixRequest({ message, code, id: Date.now() })
+  }
+
   const handleToolClick = (_toolName: string, output: unknown) => {
     const result = parseSnippetsFromOutput(output)
     if (result && result.length > 0) {
@@ -107,6 +112,7 @@ const GenerateContent = () => {
       snippets={snippets}
       isLoading={snippets.length === 0 && !!prompt && !error}
       onCompileError={handleCompileError}
+      onFixInChat={handleFixInChat}
       resetKey={searchParams.get('new')}
     />
   ) : (
@@ -134,6 +140,7 @@ const GenerateContent = () => {
           onSnippetsGenerated={handleSnippetsGenerated}
           onToolError={handleToolError}
           compileError={compileError}
+          fixRequest={fixRequest}
           resetKey={searchParams.get('new')}
           onToolClick={handleToolClick}
           currentSnippets={snippets}

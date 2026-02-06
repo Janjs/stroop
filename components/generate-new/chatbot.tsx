@@ -266,12 +266,13 @@ interface ChatbotProps {
   onToolError?: (message: string) => void
   onChatCreated?: (chatId: string) => void
   compileError?: { message: string; code: string; id: number } | null
+  fixRequest?: { message: string; code: string; id: number } | null
   resetKey?: string | null
   onToolClick?: (toolName: string, output: any) => void
   currentSnippets?: StrudelSnippet[]
 }
 
-function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, resetKey, onToolClick, currentSnippets }: ChatbotProps) {
+function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, fixRequest, resetKey, onToolClick, currentSnippets }: ChatbotProps) {
   const [selectedMood, setSelectedMood] = useState<string | null>(null)
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
@@ -600,6 +601,30 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       { body: { model: 'gpt-5.2', currentCode } }
     )
   }, [compileError, status, messages, externalPrompt, sendMessage])
+
+  const lastHandledFixRequestIdRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!fixRequest || status !== 'ready') return
+    if (lastHandledFixRequestIdRef.current === fixRequest.id) return
+    lastHandledFixRequestIdRef.current = fixRequest.id
+
+    const fixPrompt = [
+      `The Strudel code has a syntax error. Please fix it.`,
+      `Error: ${fixRequest.message}`,
+      '',
+      'Failing code:',
+      '```',
+      fixRequest.code,
+      '```',
+      '',
+      'Fix the error and regenerate valid Strudel code.',
+    ].join('\n')
+    const currentCode = currentSnippets?.map(s => s.code).filter(Boolean).join('\n\n') || undefined
+    sendMessage(
+      { text: fixPrompt },
+      { body: { model: 'gpt-5.2', currentCode } }
+    )
+  }, [fixRequest, status, sendMessage, currentSnippets])
 
   // Reset chat when resetKey changes (New Chat for anonymous users)
   const lastResetKeyRef = useRef<string | null>(null)
@@ -980,7 +1005,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   )
 }
 
-export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, resetKey, onToolClick, currentSnippets }: ChatbotProps) {
+export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, fixRequest, resetKey, onToolClick, currentSnippets }: ChatbotProps) {
   return (
     <PromptInputProvider>
       <ChatbotContent
@@ -989,6 +1014,8 @@ export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolErr
         onSnippetsGenerated={onSnippetsGenerated}
         onToolError={onToolError}
         onChatCreated={onChatCreated}
+        compileError={compileError}
+        fixRequest={fixRequest}
         resetKey={resetKey}
         onToolClick={onToolClick}
         currentSnippets={currentSnippets}
