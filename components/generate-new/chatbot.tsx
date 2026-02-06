@@ -850,7 +850,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         <CollapsibleContent>
           <Label className="mb-3 text-xs text-muted-foreground">Mood</Label>
           <SuggestionsWithFade className="my-1">
-            <Suggestions className="py-1">
+            <Suggestions className="py-1 ml-0.5">
               {MOODS.map((mood) => (
                 <Suggestion
                   size="sm"
@@ -864,7 +864,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           </SuggestionsWithFade>
           <Label className="mb-2 text-xs text-muted-foreground">Genre</Label>
           <SuggestionsWithFade className="my-1">
-            <Suggestions className="py-1">
+            <Suggestions className="py-1 ml-0.5">
               {GENRES.map((genre) => (
                 <Suggestion
                   key={genre}
@@ -877,7 +877,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           </SuggestionsWithFade>
           <Label className="mb-2 text-xs text-muted-foreground">Tempo</Label>
           <SuggestionsWithFade className="my-1">
-            <Suggestions className="mb-2 py-1">
+            <Suggestions className="mb-2 py-1 ml-0.5">
               {TEMPOS.map((tempo) => (
                 <Suggestion
                   key={tempo}
