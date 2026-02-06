@@ -5,7 +5,7 @@ import { StrudelSnippet } from '@/types/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Check, Copy, Pause, Play } from 'lucide-react'
+import { Check, Copy, Minus, Pause, Play, Plus } from 'lucide-react'
 import '@strudel/repl'
 import { useTheme } from 'next-themes'
 
@@ -110,6 +110,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, resetK
   const lastErrorKeyRef = useRef<string | null>(null)
   const lastCompileErrorKeyRef = useRef<string | null>(null)
   const strudelThemeSourceRef = useRef('')
+  const [fontSize, setFontSize] = useState(14)
 
 
   useEffect(() => {
@@ -252,7 +253,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, resetK
         styleEl.id = id
       }
       styleEl.textContent = `
-#strudel-repl-container .cm-editor,#strudel-repl-container .cm-scroller,#strudel-repl-container .cm-content,#strudel-repl-container .cm-line{font-family:${fontMono};font-weight:500;}
+#strudel-repl-container .cm-editor,#strudel-repl-container .cm-scroller,#strudel-repl-container .cm-content,#strudel-repl-container .cm-line{font-family:${fontMono};font-weight:500;font-size:${fontSize}px;}
 #strudel-repl-container .cm-editor{background-color:${bg} !important;color:${fg} !important;border-radius:${radius};}
 #strudel-repl-container .cm-scroller{background-color:${bg} !important;}
 #strudel-repl-container .cm-content{color:${fg} !important;}
@@ -273,7 +274,7 @@ ${tokenRules}
       window.clearTimeout(late)
       document.getElementById('strudel-app-theme')?.remove()
     }
-  }, [isEditorReady, resolvedTheme])
+  }, [isEditorReady, resolvedTheme, fontSize])
 
   useEffect(() => {
     return () => {
@@ -447,28 +448,36 @@ ${tokenRules}
           </div>
         ) : (
           <>
-            {createElement('strudel-editor', { ref: replRef, className: 'w-full flex-none h-0 min-h-0 overflow-hidden' })}
-            {replError ? (
-              <div className="px-4 pb-3">
-                <Alert variant="destructive">
-                  <AlertTitle>Strudel syntax error</AlertTitle>
-                  <AlertDescription>{replError.message}</AlertDescription>
-                </Alert>
+            <div className="relative flex-1 min-h-0">
+              {createElement('strudel-editor', { ref: replRef, className: 'w-full flex-none h-0 min-h-0 overflow-hidden' })}
+              {replError ? (
+                <div className="absolute bottom-12 left-2 right-2 z-10">
+                  <Alert variant="destructive">
+                    <AlertTitle>Strudel syntax error</AlertTitle>
+                    <AlertDescription>{replError.message}</AlertDescription>
+                  </Alert>
+                </div>
+              ) : null}
+              <div className="absolute bottom-3 right-3 z-10 flex flex-col items-end gap-2">
+                <div className="flex items-center gap-1 rounded-md bg-background/80 backdrop-blur-sm border">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setFontSize((s) => Math.max(10, s - 1))} aria-label="Decrease font size">
+                    <Minus className="h-3 w-3" />
+                  </Button>
+                  <span className="text-xs tabular-nums w-6 text-center select-none">{fontSize}</span>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setFontSize((s) => Math.min(24, s + 1))} aria-label="Increase font size">
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="icon" className="h-9 w-9 bg-background/80 backdrop-blur-sm" onClick={handleCopy} aria-label="Copy code" disabled={!activeSnippet?.code}>
+                    {hasCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                  <Button className="bg-primary/90 backdrop-blur-sm" onClick={handleTogglePlayback} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isEditorReady || Boolean(replError)}>
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    {isPlaying ? 'Pause' : 'Play'}
+                  </Button>
+                </div>
               </div>
-            ) : null}
-            <div className="flex items-center justify-end gap-2 px-4 py-3 flex-none">
-              <Button variant="outline" onClick={handleCopy} aria-label="Copy code" disabled={!activeSnippet?.code}>
-                {hasCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {hasCopied ? 'Copied' : 'Copy'}
-              </Button>
-              <Button
-                onClick={handleTogglePlayback}
-                aria-label={isPlaying ? 'Pause' : 'Play'}
-                disabled={!isEditorReady || Boolean(replError)}
-              >
-                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                {isPlaying ? 'Pause' : 'Play'}
-              </Button>
             </div>
           </>
         )}

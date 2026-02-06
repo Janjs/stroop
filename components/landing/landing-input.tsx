@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   PromptInput,
@@ -11,61 +12,146 @@ import {
   usePromptInputController,
   type PromptInputMessage,
 } from '@/components/ai-elements/prompt-input'
-import { Badge } from '@/components/ui/badge'
-import { Icons } from '@/components/icons'
-import Link from 'next/link'
+import {
+  Suggestions,
+  Suggestion,
+} from '@/components/ai-elements/suggestion'
+import { Label } from '@/components/ui/label'
 
-const DEFAULT_PROMPT = 'e.g., dreamy lo-fi beat at 90 bpm'
+function SuggestionsWithFade({ children, className }: { children: React.ReactNode; className?: string }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [showLeftFade, setShowLeftFade] = useState(false)
+  const [showRightFade, setShowRightFade] = useState(false)
 
-const PROMPT_SUGGESTIONS = [
-  'Dreamy lo-fi beat at 90 bpm',
-  'Bright synth groove with syncopated hats',
-  'Minimal techno pulse at 130 bpm',
-  'Warm ambient pads with slow kick',
-  'Playful chiptune groove at 150 bpm',
-  'Melancholic downtempo rhythm',
-]
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const viewport = container.querySelector('[data-radix-scroll-area-viewport]')
+    if (!viewport) return
+
+    const checkScroll = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = viewport as HTMLElement
+      setShowLeftFade(scrollLeft > 0)
+      setShowRightFade(scrollLeft < scrollWidth - clientWidth - 1)
+    }
+
+    checkScroll()
+    viewport.addEventListener('scroll', checkScroll)
+    window.addEventListener('resize', checkScroll)
+
+    return () => {
+      viewport.removeEventListener('scroll', checkScroll)
+      window.removeEventListener('resize', checkScroll)
+    }
+  }, [])
+
+  return (
+    <div ref={containerRef} className={`relative ${className || ''}`}>
+      {showLeftFade && (
+        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+      )}
+      {showRightFade && (
+        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+      )}
+      {children}
+    </div>
+  )
+}
+
+const MOODS = ['Happy', 'Sad', 'Dreamy', 'Energetic', 'Chill', 'Melancholic', 'Romantic', 'Mysterious']
+const GENRES = ['Jazz', 'Pop', 'R&B', 'Classical', 'Lo-fi', 'Rock', 'Blues', 'Folk']
+const TEMPOS = ['70 bpm', '90 bpm', '110 bpm', '130 bpm', '150 bpm']
+
+function constructPrompt(mood: string | null, genre: string | null, tempo: string | null) {
+  const parts: string[] = []
+  if (mood) parts.push(mood)
+  if (genre) parts.push(genre)
+  if (tempo) parts.push(`at ${tempo}`)
+  return parts.join(' ')
+}
 
 function LandingInputContent() {
   const router = useRouter()
-
   const { textInput } = usePromptInputController()
 
-  const handleSubmit = (message: PromptInputMessage) => {
-    const hasText = Boolean(message.text?.trim())
-    if (!hasText) return
+  const [selectedMood, setSelectedMood] = useState<string | null>(null)
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
+  const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
 
-    const textToSend = message.text || DEFAULT_PROMPT
-    router.push(`/generate?prompt=${encodeURIComponent(textToSend)}`)
+  const handleMoodClick = (mood: string) =>
+    setSelectedMood((prev) => (prev === mood ? null : mood))
+  const handleGenreClick = (genre: string) =>
+    setSelectedGenre((prev) => (prev === genre ? null : genre))
+  const handleTempoClick = (tempo: string) =>
+    setSelectedTempo((prev) => (prev === tempo ? null : tempo))
+
+  useEffect(() => {
+    const prompt = constructPrompt(selectedMood, selectedGenre, selectedTempo)
+    textInput.setInput(prompt)
+  }, [selectedMood, selectedGenre, selectedTempo])
+
+  const handleSubmit = (message: PromptInputMessage) => {
+    const text = message.text?.trim() || constructPrompt(selectedMood, selectedGenre, selectedTempo)
+    if (!text) return
+    router.push(`/generate?prompt=${encodeURIComponent(text)}`)
   }
 
-  const hasText = Boolean(textInput.value?.trim())
+  const hasSelections = selectedMood || selectedGenre || selectedTempo
+  const hasText = Boolean(textInput.value?.trim()) || hasSelections
 
   return (
-    <div className="flex flex-col w-full max-w-xl items-center">
+    <div className="flex flex-col w-full max-w-xl">
       <PromptInput onSubmit={handleSubmit} className="w-full">
         <PromptInputBody>
-          <PromptInputTextarea placeholder={DEFAULT_PROMPT} />
+          <PromptInputTextarea placeholder="e.g., dreamy lo-fi beat at 90 bpm" />
         </PromptInputBody>
         <PromptInputFooter className="flex w-full justify-end">
           <PromptInputSubmit disabled={!hasText} />
         </PromptInputFooter>
       </PromptInput>
 
-      <div className="mt-6">
-        <div className="mb-4 flex items-center justify-center gap-2 text-muted-foreground">
-          <Icons.lightbulb className="h-4 w-4" />
-          <p className="text-sm">Need inspiration? Try one of these:</p>
-        </div>
-        <div className="flex flex-wrap justify-center gap-2">
-          {PROMPT_SUGGESTIONS.map((suggestion, i) => (
-            <Link key={i} href={`/generate?prompt=${encodeURIComponent(suggestion)}`}>
-              <Badge variant="outline" className="cursor-pointer hover:bg-primary/10 transition-colors px-3 py-1.5">
-                {suggestion}
-              </Badge>
-            </Link>
-          ))}
-        </div>
+      <div className="mt-4 space-y-1">
+        <Label className="mb-3 text-xs text-muted-foreground">Mood</Label>
+        <SuggestionsWithFade className="my-1">
+          <Suggestions className="py-1 ml-0.5">
+            {MOODS.map((mood) => (
+              <Suggestion
+                size="sm"
+                key={mood}
+                suggestion={mood}
+                selected={selectedMood === mood}
+                onClick={handleMoodClick}
+              />
+            ))}
+          </Suggestions>
+        </SuggestionsWithFade>
+        <Label className="mb-2 text-xs text-muted-foreground">Genre</Label>
+        <SuggestionsWithFade className="my-1">
+          <Suggestions className="py-1 ml-0.5">
+            {GENRES.map((genre) => (
+              <Suggestion
+                key={genre}
+                suggestion={genre}
+                selected={selectedGenre === genre}
+                onClick={handleGenreClick}
+              />
+            ))}
+          </Suggestions>
+        </SuggestionsWithFade>
+        <Label className="mb-2 text-xs text-muted-foreground">Tempo</Label>
+        <SuggestionsWithFade className="my-1">
+          <Suggestions className="py-1 ml-0.5">
+            {TEMPOS.map((tempo) => (
+              <Suggestion
+                key={tempo}
+                suggestion={tempo}
+                selected={selectedTempo === tempo}
+                onClick={handleTempoClick}
+              />
+            ))}
+          </Suggestions>
+        </SuggestionsWithFade>
       </div>
     </div>
   )

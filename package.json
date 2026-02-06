@@ -12,7 +12,8 @@
     "convex:codegen": "convex codegen",
     "clear-sessions": "convex run admin:clearAllAnonymousUsers",
     "reset-anonymous-users": "convex run admin:clearAllAnonymousUsers",
-    "clear-cache": "convex run cache:clearPromptCache && convex run cache:clearToolCache"
+    "clear-cache": "convex run cache:clearPromptCache && convex run cache:clearToolCache",
+    "seed-examples": "NEXT_PUBLIC_CONVEX_URL=$(grep NEXT_PUBLIC_CONVEX_URL .env.local | cut -d= -f2) npx tsx scripts/seed-example-cache.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.19",
@@ -58,6 +59,7 @@
     "cmdk": "^1.1.1",
     "convex": "~1.28.0",
     "date-fns": "^4.1.0",
+    "embla-carousel-autoplay": "^8.6.0",
     "embla-carousel-react": "^8.6.0",
     "embla-carousel-wheel-gestures": "^8.1.0",
     "eslint": "9.39.2",
