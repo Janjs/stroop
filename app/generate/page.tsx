@@ -136,6 +136,7 @@ const GenerateContent = () => {
           compileError={compileError}
           resetKey={searchParams.get('new')}
           onToolClick={handleToolClick}
+          currentSnippets={snippets}
         />
       </div>
 

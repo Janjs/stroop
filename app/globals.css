@@ -346,4 +346,42 @@ strudel-editor + div .cm-scroller {
 strudel-editor + div .cm-editor {
   flex: 1 1 auto;
   min-height: 0;
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+  border-radius: var(--radius);
+}
+
+strudel-editor + div .cm-scroller {
+  background-color: var(--background) !important;
+}
+
+strudel-editor + div .cm-content {
+  color: var(--foreground) !important;
+}
+
+strudel-editor + div .cm-gutters {
+  background-color: var(--muted) !important;
+  border-color: var(--border);
+}
+
+strudel-editor + div .cm-activeLineGutter {
+  background-color: var(--accent) !important;
+  color: var(--accent-foreground) !important;
+}
+
+strudel-editor + div .cm-activeLine {
+  background-color: var(--muted) !important;
+}
+
+strudel-editor + div .cm-selectionMatch,
+strudel-editor + div .cm-selectionBackground {
+  background-color: var(--accent) !important;
+}
+
+strudel-editor + div .cm-editor.cm-focused {
+  outline-color: var(--ring);
+}
+
+strudel-editor + div .cm-cursor {
+  border-left-color: var(--foreground);
 }

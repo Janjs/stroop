@@ -107,33 +107,49 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, resetK
   const copyTimeoutRef = useRef<number | null>(null)
   const { resolvedTheme } = useTheme()
   const baseHtmlClassesRef = useRef<string[]>([])
-  const lockedThemeVarsRef = useRef<Record<string, string>>({})
   const lastErrorKeyRef = useRef<string | null>(null)
   const lastCompileErrorKeyRef = useRef<string | null>(null)
+  const strudelThemeSourceRef = useRef('')
 
-  useEffect(() => {
-    const styleId = 'strudel-page-lock'
-    const existing = document.getElementById(styleId)
-    if (existing) return
-    const style = document.createElement('style')
-    style.id = styleId
-    style.textContent = `
-      html, body {
-        background: var(--color-background) !important;
-        color: var(--color-foreground) !important;
-      }
-    `
-    document.head.appendChild(style)
-    return () => {
-      style.remove()
-    }
-  }, [])
 
   useEffect(() => {
     const html = document.documentElement
     if (!baseHtmlClassesRef.current.length) {
       baseHtmlClassesRef.current = Array.from(html.classList).filter((item) => item !== 'light' && item !== 'dark')
     }
+  }, [])
+
+  useEffect(() => {
+    const cacheAndNeutralize = (styleEl: HTMLStyleElement) => {
+      if (styleEl.textContent?.trim()) {
+        strudelThemeSourceRef.current = styleEl.textContent
+        styleEl.textContent = ''
+      }
+    }
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === 'childList') {
+          for (const node of m.addedNodes) {
+            if (node instanceof HTMLStyleElement && node.id === 'strudel-theme-vars') {
+              cacheAndNeutralize(node)
+              return
+            }
+          }
+        }
+        if (
+          m.type === 'characterData' &&
+          m.target.parentElement instanceof HTMLStyleElement &&
+          m.target.parentElement.id === 'strudel-theme-vars'
+        ) {
+          cacheAndNeutralize(m.target.parentElement)
+          return
+        }
+      }
+    })
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true })
+    const existing = document.getElementById('strudel-theme-vars')
+    if (existing instanceof HTMLStyleElement) cacheAndNeutralize(existing)
+    return () => observer.disconnect()
   }, [])
 
   useEffect(() => {
@@ -156,50 +172,6 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, resetK
   }, [resolvedTheme])
 
   useEffect(() => {
-    if (!resolvedTheme) return
-    const html = document.documentElement
-    const themeVarPrefixes = [
-      '--background',
-      '--foreground',
-      '--card',
-      '--popover',
-      '--primary',
-      '--secondary',
-      '--muted',
-      '--accent',
-      '--destructive',
-      '--border',
-      '--input',
-      '--ring',
-      '--chart-',
-      '--sidebar',
-      '--font-',
-      '--radius',
-      '--shadow-',
-      '--tracking-',
-      '--spacing',
-    ]
-    const computed = window.getComputedStyle(html)
-    const nextVars: Record<string, string> = {}
-    for (let i = 0; i < computed.length; i += 1) {
-      const name = computed.item(i)
-      if (!name.startsWith('--')) continue
-      if (!themeVarPrefixes.some((prefix) => name.startsWith(prefix))) continue
-      nextVars[name] = computed.getPropertyValue(name)
-    }
-    lockedThemeVarsRef.current = nextVars
-    const applyLockedVars = () => {
-      Object.entries(lockedThemeVarsRef.current).forEach(([name, value]) => {
-        html.style.setProperty(name, value, 'important')
-      })
-    }
-    applyLockedVars()
-    const observer = new MutationObserver(() => applyLockedVars())
-    observer.observe(html, { attributes: true, attributeFilter: ['style'] })
-    return () => observer.disconnect()
-  }, [resolvedTheme])
-
-  useEffect(() => {
     let frameId = 0
     const checkReady = () => {
       if (replRef.current?.editor) {
@@ -213,6 +185,93 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, resetK
       window.cancelAnimationFrame(frameId)
     }
   }, [])
+
+  useEffect(() => {
+    if (!isEditorReady || !replRef.current) return
+    const cmTokenChar = '\u037C'
+    const apply = () => {
+      const container = replRef.current?.nextElementSibling as HTMLElement | null
+      if (!container?.querySelector('.cm-editor')) return
+      container.id = 'strudel-repl-container'
+      const root = getComputedStyle(document.documentElement)
+      const get = (v: string) => root.getPropertyValue(v).trim() || 'inherit'
+      const bg = get('--background')
+      const fg = get('--foreground')
+      const muted = get('--muted')
+      const border = get('--border')
+      const accent = get('--accent')
+      const accentFg = get('--accent-foreground')
+      const ring = get('--ring')
+      const radius = get('--radius')
+      const fontMono = get('--font-mono') || 'monospace'
+      const mutedFg = get('--muted-foreground')
+      const primary = get('--primary')
+      const secondary = get('--secondary')
+      const accentColor = get('--accent')
+      const ringColor = get('--ring')
+      const themeEl = document.getElementById('strudel-theme-vars')
+      if (themeEl instanceof HTMLStyleElement && themeEl.textContent?.trim()) {
+        strudelThemeSourceRef.current = themeEl.textContent
+        themeEl.textContent = ''
+      }
+      const pct = resolvedTheme === 'dark' ? '35' : '80'
+      const pastel = (color: string) => `color-mix(in oklab, ${color} ${pct}%, ${bg})`
+      const palette = [
+        pastel(primary),
+        pastel(accentColor),
+        pastel(secondary),
+        pastel(mutedFg),
+        pastel(ringColor),
+        pastel(fg),
+      ]
+      const tokenClasses = new Set<string>()
+      for (const sheet of document.styleSheets) {
+        try {
+          for (const rule of sheet.cssRules) {
+            const r = rule as CSSStyleRule
+            if (r.selectorText?.includes(cmTokenChar) && r.style?.color) {
+              const matches = r.selectorText.match(new RegExp(`${cmTokenChar}[\\da-zA-Z]+`, 'g'))
+              matches?.forEach((m) => tokenClasses.add(m))
+            }
+          }
+        } catch (_) {}
+      }
+      let tokenRules = ''
+      let idx = 0
+      tokenClasses.forEach((cls) => {
+        const color = palette[idx % palette.length]
+        tokenRules += `#strudel-repl-container .cm-editor .${cls}{color:${color} !important;}`
+        idx += 1
+      })
+      const id = 'strudel-app-theme'
+      let styleEl = document.getElementById(id) as HTMLStyleElement | null
+      if (!styleEl) {
+        styleEl = document.createElement('style')
+        styleEl.id = id
+      }
+      styleEl.textContent = `
+#strudel-repl-container .cm-editor,#strudel-repl-container .cm-scroller,#strudel-repl-container .cm-content,#strudel-repl-container .cm-line{font-family:${fontMono};}
+#strudel-repl-container .cm-editor{background-color:${bg} !important;color:${fg} !important;border-radius:${radius};}
+#strudel-repl-container .cm-scroller{background-color:${bg} !important;}
+#strudel-repl-container .cm-content{color:${fg} !important;}
+#strudel-repl-container .cm-gutters{background-color:${muted} !important;border-color:${border};}
+#strudel-repl-container .cm-activeLineGutter{background-color:${accent} !important;color:${accentFg} !important;}
+#strudel-repl-container .cm-activeLine{background-color:${muted} !important;}
+#strudel-repl-container .cm-selectionMatch,#strudel-repl-container .cm-selectionBackground{background-color:${accent} !important;}
+#strudel-repl-container .cm-editor.cm-focused{outline-color:${ring};}
+#strudel-repl-container .cm-cursor{border-left-color:${fg};}
+${tokenRules}
+`
+      document.head.appendChild(styleEl)
+    }
+    const raf = window.requestAnimationFrame(() => apply())
+    const late = window.setTimeout(() => apply(), 300)
+    return () => {
+      window.cancelAnimationFrame(raf)
+      window.clearTimeout(late)
+      document.getElementById('strudel-app-theme')?.remove()
+    }
+  }, [isEditorReady, resolvedTheme])
 
   useEffect(() => {
     return () => {

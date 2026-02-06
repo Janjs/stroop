@@ -12,6 +12,7 @@ export const maxDuration = 30
 
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 let strudelGuideCache: string | null = null
+let strudelExamplesCache: string | null = null
 
 async function getStrudelGuide(): Promise<string> {
   if (strudelGuideCache) {
@@ -20,6 +21,15 @@ async function getStrudelGuide(): Promise<string> {
   const guidePath = path.join(process.cwd(), 'docs', 'strudel-code-guide.md')
   strudelGuideCache = await readFile(guidePath, 'utf8')
   return strudelGuideCache
+}
+
+async function getStrudelExamples(): Promise<string> {
+  if (strudelExamplesCache) {
+    return strudelExamplesCache
+  }
+  const examplesPath = path.join(process.cwd(), 'docs', 'examples.md')
+  strudelExamplesCache = await readFile(examplesPath, 'utf8')
+  return strudelExamplesCache
 }
 
 function generateCacheKey(messages: UIMessage[], model: string): string {
@@ -156,9 +166,11 @@ export async function POST(req: Request) {
     const {
       messages,
       model = 'gpt-5.2',
+      currentCode,
     }: {
       messages: UIMessage[]
       model?: string
+      currentCode?: string
     } = await req.json()
 
     const cacheKey = generateCacheKey(messages, model)
@@ -182,16 +194,22 @@ export async function POST(req: Request) {
       })
     }
 
-    const strudelGuide = await getStrudelGuide()
+    const [strudelGuide, strudelExamples] = await Promise.all([getStrudelGuide(), getStrudelExamples()])
+    const currentCodeContext = currentCode
+      ? `\n\nThe user currently has this Strudel code loaded. When they ask to edit or modify it, use this as the base and make the requested changes:\n\`\`\`strudel\n${currentCode}\n\`\`\``
+      : ''
     const systemPrompt = `You are a helpful assistant that generates Strudel code based on user requests.
 Use the Strudel guide below as the source of truth for syntax and capabilities.
+Study the examples carefully to understand the style, structure, and patterns of good Strudel code.
 
 Strudel guide:
 ${strudelGuide}
 
+${strudelExamples}${currentCodeContext}
+
 When users ask for Strudel code, you should:
 1. First, provide a brief response acknowledging their request and explaining what you are about to do.
-2. Then use the generateStrudelCode tool to create the snippets. The description should include any relevant details like mood, genre, tempo, or style mentioned by the user.
+2. Then use the generateStrudelCode tool to create the snippets. The description should include any relevant details like mood, genre, tempo, or style mentioned by the user. If the user is asking to modify existing code, include the full current code and the specific changes requested.
 3. After the tool completes, provide a detailed explanation of what was created and how the Strudel code is structured.
 
 If you are generating any Strudel code, you must call the generateStrudelCode tool and never output Strudel code directly without a tool call.

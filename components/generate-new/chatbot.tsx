@@ -268,9 +268,10 @@ interface ChatbotProps {
   compileError?: { message: string; code: string; id: number } | null
   resetKey?: string | null
   onToolClick?: (toolName: string, output: any) => void
+  currentSnippets?: StrudelSnippet[]
 }
 
-function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, resetKey, onToolClick }: ChatbotProps) {
+function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, resetKey, onToolClick, currentSnippets }: ChatbotProps) {
   const [selectedMood, setSelectedMood] = useState<string | null>(null)
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
@@ -283,6 +284,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const lastSubmittedPromptRef = useRef<string | null>(null)
   const lastHandledCompileErrorIdRef = useRef<number | null>(null)
   const compileRetryCountRef = useRef(0)
+  const totalCompileRetryCountRef = useRef(0)
   const lastCompileErrorCodeRef = useRef<string | null>(null)
   const lastSnippetScopeKeyRef = useRef<string | null>(null)
 
@@ -557,9 +559,13 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   }, [messages, status])
 
   useEffect(() => {
+    const MAX_RETRIES_PER_CODE = 2
+    const MAX_TOTAL_RETRIES = 5
+
     if (!compileError || status !== 'ready') return
     if (lastHandledCompileErrorIdRef.current === compileError.id) return
-    if (lastCompileErrorCodeRef.current === compileError.code && compileRetryCountRef.current >= 1) {
+    if (totalCompileRetryCountRef.current >= MAX_TOTAL_RETRIES) return
+    if (lastCompileErrorCodeRef.current === compileError.code && compileRetryCountRef.current >= MAX_RETRIES_PER_CODE) {
       return
     }
     lastHandledCompileErrorIdRef.current = compileError.id
@@ -568,6 +574,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       compileRetryCountRef.current = 0
     }
     compileRetryCountRef.current += 1
+    totalCompileRetryCountRef.current += 1
 
     const lastUserMessage = [...messages].reverse().find((message) => message?.role === 'user')
     const lastUserText =
@@ -576,13 +583,21 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       externalPrompt ||
       ''
     const retryPrompt = [
-      'The generated Strudel code failed to compile.',
+      `The generated Strudel code failed to compile (auto-retry ${totalCompileRetryCountRef.current}/${MAX_TOTAL_RETRIES}).`,
       `Error: ${compileError.message}`,
-      lastUserText ? `Original request: ${lastUserText}` : 'Please regenerate a valid Strudel snippet.',
-    ].join('\n')
+      '',
+      'Failing code:',
+      '```',
+      compileError.code,
+      '```',
+      '',
+      lastUserText ? `Original request: ${lastUserText}` : '',
+      'Fix the compilation error and regenerate valid Strudel code.',
+    ].filter(Boolean).join('\n')
+    const currentCode = currentSnippets?.map(s => s.code).filter(Boolean).join('\n\n') || undefined
     sendMessage(
       { text: retryPrompt },
-      { body: { model: 'gpt-5.2' } }
+      { body: { model: 'gpt-5.2', currentCode } }
     )
   }, [compileError, status, messages, externalPrompt, sendMessage])
 
@@ -605,6 +620,9 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       setSelectedGenre(null)
       setSelectedTempo(null)
       lastSubmittedPromptRef.current = null
+      compileRetryCountRef.current = 0
+      totalCompileRetryCountRef.current = 0
+      lastCompileErrorCodeRef.current = null
     }
   }, [resetKey, setMessages, textInput])
 
@@ -739,6 +757,9 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
 
     setError(null)
+    compileRetryCountRef.current = 0
+    totalCompileRetryCountRef.current = 0
+    lastCompileErrorCodeRef.current = null
     const textToSend = message.text || constructPrompt()
     console.log('Sending message:', textToSend)
 
@@ -751,18 +772,20 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
     lastSubmittedPromptRef.current = textToSend
 
+    const currentCode = currentSnippets?.map(s => s.code).filter(Boolean).join('\n\n') || undefined
     sendMessage(
       { text: textToSend },
       {
         body: {
           model: 'gpt-5.2',
+          currentCode,
         },
       }
     )
 
     setSelectedMood(null)
     setSelectedGenre(null)
-      setSelectedTempo(null)
+    setSelectedTempo(null)
     setIsSuggestionsOpen(false)
   }
 
@@ -957,7 +980,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   )
 }
 
-export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, resetKey, onToolClick }: ChatbotProps) {
+export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, resetKey, onToolClick, currentSnippets }: ChatbotProps) {
   return (
     <PromptInputProvider>
       <ChatbotContent
@@ -968,6 +991,7 @@ export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolErr
         onChatCreated={onChatCreated}
         resetKey={resetKey}
         onToolClick={onToolClick}
+        currentSnippets={currentSnippets}
       />
     </PromptInputProvider>
   )
