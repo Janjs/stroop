@@ -113,15 +113,6 @@ const shouldUseToolResult = (result: { success?: boolean; snippets?: StrudelSnip
 const extractSnippetsFromMessages = (messages: any[]): StrudelSnippet[] => {
   const snippets: StrudelSnippet[] = []
   for (const m of messages) {
-    if (m?.toolInvocations && Array.isArray(m.toolInvocations)) {
-      for (const invocation of m.toolInvocations) {
-        if (invocation?.toolName !== 'generateStrudelCode') continue
-        const result = parseToolResult(invocation.result ?? invocation.output)
-        if (shouldUseToolResult(result)) {
-          snippets.push(...(result?.snippets ?? []))
-        }
-      }
-    }
     if (m.role === 'assistant' && m.parts) {
       for (const part of m.parts) {
         const toolName = getToolName(part)
@@ -333,7 +324,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           const assistantMessage = {
             id: message.id || crypto.randomUUID(),
             role: 'assistant' as const,
-            content: message.content || '',
+            content: message.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('') || '',
             parts: message.parts,
             createdAt: Date.now()
           }
@@ -422,31 +413,6 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       if (!message || message.role !== 'assistant') {
         continue
       }
-      if (message.toolInvocations && Array.isArray(message.toolInvocations)) {
-        for (const [invocationIndex, invocation] of message.toolInvocations.entries()) {
-          if (invocation?.toolName !== 'generateStrudelCode') continue
-          const callId = typeof invocation.toolCallId === 'string'
-            ? invocation.toolCallId
-            : typeof invocation.id === 'string'
-              ? invocation.id
-              : `${message.id}-invocation-${invocationIndex}`
-          if (handledToolCallIdsRef.current.has(callId)) {
-            continue
-          }
-          const result = parseToolResult(invocation.result ?? invocation.output)
-          if (result?.error) {
-            setError(result.error)
-            onToolError?.(result.error)
-            handledToolCallIdsRef.current.add(callId)
-            return
-          }
-          if (shouldUseToolResult(result) && onSnippetsGenerated) {
-            onSnippetsGenerated(result.snippets)
-            handledToolCallIdsRef.current.add(callId)
-            return
-          }
-        }
-      }
       if (!message.parts) {
         continue
       }
@@ -470,7 +436,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           return
         }
         if (shouldUseToolResult(result) && onSnippetsGenerated) {
-          onSnippetsGenerated(result.snippets)
+          onSnippetsGenerated(result!.snippets!)
           handledToolCallIdsRef.current.add(callId)
           return
         }
