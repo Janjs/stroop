@@ -35,7 +35,6 @@ async function getStrudelExamples(): Promise<string> {
 function generateCacheKey(messages: UIMessage[], model: string): string {
   const normalized = messages.map((m) => ({
     role: m.role,
-    content: m.content,
     parts: m.parts?.map((p: any) => {
       if (p.type === 'text') return { type: 'text', text: p.text }
       return p
