@@ -21,7 +21,7 @@ const Page = () => {
   }
 
   return (
-    <div className="flex min-h-[calc(100dvh-60px)] w-full max-w-full items-center justify-center px-4 py-8 md:px-8 lg:px-12">
+    <div className="flex min-h-[calc(100dvh-60px)] w-full max-w-full md:items-center justify-center px-4 py-8 md:px-8 lg:px-12">
       <div className="flex w-full max-w-6xl flex-col gap-12 md:flex-row md:items-center md:gap-10 lg:gap-16">
         <div className="flex flex-col gap-4 md:w-[55%]">
           {!isLoading && !isAuthenticated && (
@@ -31,7 +31,7 @@ const Page = () => {
             >
               <span className="h-2.5 w-2.5 rounded-full bg-accent" />
               <span className="flex items-center gap-1 leading-none">
-                Start with
+                Sign up
                 <Icons.music className="h-3.5 w-3.5" />
               </span>
             </Badge>

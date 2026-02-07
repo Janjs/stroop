@@ -47,7 +47,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     <Suspense fallback={null}>
                       <Header />
                     </Suspense>
-                    <div className="flex flex-1 overflow-hidden justify-center min-w-0">{children}</div>
+                    <div className="flex flex-1 overflow-auto justify-center min-w-0">{children}</div>
                   </div>
                 </SidebarInset>
               </SidebarProvider>

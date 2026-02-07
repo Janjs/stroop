@@ -5,6 +5,10 @@
 .env.test
 .env.production
 
+.playwright-mcp/
+/*.png
+
+
 node_modules/
 .next/
 dist/

@@ -353,7 +353,7 @@ export default function ExamplesCarousel() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-3">
+    <div className="flex w-full flex-col gap-3 mb-8 md:mb-0">
       <div className="absolute w-0 h-0 overflow-hidden pointer-events-none" aria-hidden="true">
         {createElement('strudel-editor', { ref: replRef })}
       </div>
