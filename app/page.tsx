@@ -34,7 +34,7 @@ const Page = () => {
                 Sign up
                 <Icons.music className="h-3.5 w-3.5" />
               </span>
-            </Badge>
+          </Badge>
           )}
           <h1 className="text-3xl md:text-5xl font-bold flex flex-wrap items-start gap-x-2 gap-y-1 font-outfit">
             <span>Create playable</span>

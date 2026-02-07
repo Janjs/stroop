@@ -112,6 +112,8 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, onFixI
   const lastCompileErrorKeyRef = useRef<string | null>(null)
   const strudelThemeSourceRef = useRef('')
   const [fontSize, setFontSize] = useState(14)
+  const onCompileErrorRef = useRef(onCompileError)
+  onCompileErrorRef.current = onCompileError
 
 
   useEffect(() => {
@@ -369,12 +371,12 @@ ${tokenRules}
   }, [hasSnippet, activeSnippet?.code])
 
   useEffect(() => {
-    if (!replError || !activeSnippet?.code || !onCompileError) return
+    if (!replError || !activeSnippet?.code || !onCompileErrorRef.current) return
     const errorKey = `${replError.message}:${activeSnippet.code}`
     if (lastCompileErrorKeyRef.current === errorKey) return
     lastCompileErrorKeyRef.current = errorKey
-    onCompileError(replError.message, activeSnippet.code)
-  }, [replError, activeSnippet?.code, onCompileError])
+    onCompileErrorRef.current(replError.message, activeSnippet.code)
+  }, [replError, activeSnippet?.code])
 
   useEffect(() => {
     const repl = replRef.current

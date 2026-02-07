@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { StrudelSnippet } from '@/types/types'
 import { useQuery, useMutation, useConvexAuth } from 'convex/react'
@@ -282,6 +282,13 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
   const [isTyping, setIsTyping] = useState(false)
 
+  const onSnippetsGeneratedRef = useRef(onSnippetsGenerated)
+  onSnippetsGeneratedRef.current = onSnippetsGenerated
+  const onToolErrorRef = useRef(onToolError)
+  onToolErrorRef.current = onToolError
+  const onToolClickRef = useRef(onToolClick)
+  onToolClickRef.current = onToolClick
+
   const { isAuthenticated } = useConvexAuth()
   const { signIn } = useAuthActions()
   const pathname = usePathname()
@@ -305,12 +312,12 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const { textInput } = usePromptInputController()
   const [, setPrompt] = useGenerateSearchParams()
 
-  const { messages, sendMessage, status, setMessages } = useChat({
+  const { messages, sendMessage: rawSendMessage, status, setMessages } = useChat({
     api: '/api/chat',
     onFinish: async (message: any) => {
       const finishSnippets = extractSnippetsFromMessages([message as any])
-      if (finishSnippets.length > 0 && onSnippetsGenerated) {
-        onSnippetsGenerated(finishSnippets)
+      if (finishSnippets.length > 0) {
+        onSnippetsGeneratedRef.current?.(finishSnippets)
       }
       // Create a new chat if we don't have one, only for authenticated users
       if (isAuthenticated && !chatId && !currentChatIdRef.current) {
@@ -371,8 +378,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           const title = userMessageContent ? userMessageContent.slice(0, 50) : 'New Chat'
 
           const snippets = extractSnippetsFromMessages(messagesToSave)
-          if (snippets.length > 0 && onSnippetsGenerated) {
-            onSnippetsGenerated(snippets, true)
+          if (snippets.length > 0) {
+            onSnippetsGeneratedRef.current?.(snippets, true)
           }
 
           // Create chat mutation
@@ -399,6 +406,15 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       setError(error.message || 'An error occurred. Please try again.')
     },
   } as any)
+
+  const sendMessageRef = useRef(rawSendMessage)
+  sendMessageRef.current = rawSendMessage
+  const sendMessage = useCallback((...args: Parameters<typeof rawSendMessage>) => {
+    return sendMessageRef.current(...args)
+  }, [])
+
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
 
   useEffect(() => {
     const snippetScopeKey = `${chatId || 'new'}:${resetKey || 'none'}`
@@ -431,18 +447,18 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         const result = getToolOutput(part)
         if (result?.error) {
           setError(result.error)
-          onToolError?.(result.error)
+          onToolErrorRef.current?.(result.error)
           handledToolCallIdsRef.current.add(callId)
           return
         }
-        if (shouldUseToolResult(result) && onSnippetsGenerated) {
-          onSnippetsGenerated(result!.snippets!)
+        if (shouldUseToolResult(result) && onSnippetsGeneratedRef.current) {
+          onSnippetsGeneratedRef.current(result!.snippets!)
           handledToolCallIdsRef.current.add(callId)
           return
         }
       }
     }
-  }, [messages, onSnippetsGenerated, onToolError, chatId, resetKey])
+  }, [messages, chatId, resetKey])
 
   // Load existing chat
   useEffect(() => {
@@ -452,28 +468,23 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       currentChatIdRef.current = normalizedChatId
     }
 
-
-
     if (existingChat && existingChat.messages && existingChat.messages.length > 0) {
       if (currentChatIdRef.current === existingChat._id) {
-        // Only update if we are not already showing these messages or if we just switched chats
         const lastMessage = messages[messages.length - 1]
         const existingLastMessage = existingChat.messages[existingChat.messages.length - 1]
 
-        if (messages.length === 0 || (lastMessage && existingLastMessage && lastMessage.id !== existingLastMessage.id) || chatId !== currentChatIdRef.current) {
-          // Use a simple heuristic: if we have more messages locally, we are probably ahead of the server
-          // (e.g. optimistic updates or streaming response), so don't sync back yet.
+        if (messages.length === 0 || (lastMessage && existingLastMessage && lastMessage.id !== existingLastMessage.id)) {
           if (messages.length > existingChat.messages.length) {
             return
           }
           setMessages(existingChat.messages as any)
-          if (existingChat.snippets && existingChat.snippets.length > 0 && onSnippetsGenerated) {
-            onSnippetsGenerated(existingChat.snippets, true)
+          if (existingChat.snippets && existingChat.snippets.length > 0) {
+            onSnippetsGeneratedRef.current?.(existingChat.snippets, true)
           }
         }
       }
     }
-  }, [existingChat, setMessages, onSnippetsGenerated, messages.length, chatId])
+  }, [existingChat, setMessages, messages.length, chatId])
 
   useEffect(() => {
     if (status === 'submitted' || (messages.length > 0 && messages[messages.length - 1]?.role === 'user')) {
@@ -490,19 +501,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
   }, [status, messages])
 
-  // Auto-send external prompt when provided
   const lastExternalPromptRef = useRef<string | undefined>(undefined)
   useEffect(() => {
-    const hasMessages = messages.length > 0
-    const hasExistingChatMessages = Boolean(existingChat?.messages && existingChat.messages.length > 0)
-
-    if (hasMessages || hasExistingChatMessages) {
-      return
-    }
-
-    if (chatId) {
-      return
-    }
+    if (chatId) return
+    if (messages.length > 0) return
 
     if (externalPrompt && externalPrompt !== lastExternalPromptRef.current && status === 'ready') {
       lastExternalPromptRef.current = externalPrompt
@@ -513,7 +515,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         { body: { model: 'gpt-5.2' } }
       )
     }
-  }, [externalPrompt, status, sendMessage, messages.length, existingChat, chatId])
+  }, [externalPrompt, status, sendMessage, messages.length, chatId])
 
   useEffect(() => {
     if (status === 'streaming') {
@@ -543,7 +545,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     compileRetryCountRef.current += 1
     totalCompileRetryCountRef.current += 1
 
-    const lastUserMessage = [...messages].reverse().find((message) => message?.role === 'user')
+    const currentMessages = messagesRef.current
+    const lastUserMessage = [...currentMessages].reverse().find((message) => message?.role === 'user')
     const lastUserText =
       (lastUserMessage && 'content' in lastUserMessage ? String((lastUserMessage as any).content || '') : '') ||
       lastSubmittedPromptRef.current ||
@@ -566,7 +569,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       { text: retryPrompt },
       { body: { model: 'gpt-5.2', currentCode } }
     )
-  }, [compileError, status, messages, externalPrompt, sendMessage])
+  }, [compileError, status, externalPrompt, sendMessage])
 
   const lastHandledFixRequestIdRef = useRef<number | null>(null)
   useEffect(() => {
@@ -590,9 +593,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       { text: fixPrompt },
       { body: { model: 'gpt-5.2', currentCode } }
     )
-  }, [fixRequest, status, sendMessage, currentSnippets])
+  }, [fixRequest, status, sendMessage])
 
-  // Reset chat when resetKey changes (New Chat for anonymous users)
   const lastResetKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (resetKey && resetKey !== lastResetKeyRef.current) {
@@ -600,12 +602,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       setMessages([])
       setError(null)
       setIsSuggestionsOpen(true)
-      onSnippetsGenerated?.([], true)
-      // Reset current chat ID too if we want to force full reset
+      onSnippetsGeneratedRef.current?.([], true)
       currentChatIdRef.current = null
       lastSnippetScopeKeyRef.current = null
 
-      // Clear input and suggestions
       textInput.setInput('')
       setSelectedMood(null)
       setSelectedGenre(null)
@@ -668,7 +668,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
 
     saveChat()
-  }, [messages, status, isAuthenticated, createChat, updateChat, onChatCreated, router, searchParams])
+  }, [messages, status, isAuthenticated, updateChat])
 
   const constructPrompt = () => {
     const parts: string[] = []
@@ -864,8 +864,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                               key={i}
                               className={`flex items-center gap-2 p-3 rounded-md border bg-muted/30 transition-shadow ${isLoading ? 'shadow-[0_0_15px_hsl(var(--primary)/0.4)] animate-pulse' : ''} ${isCompleted ? 'cursor-pointer hover:bg-muted/50' : ''}`}
                               onClick={() => {
-                                if (isCompleted && onToolClick && 'output' in part) {
-                                  onToolClick('generateStrudelCode', part.output)
+                                if (isCompleted && onToolClickRef.current && 'output' in part) {
+                                  onToolClickRef.current('generateStrudelCode', part.output)
                                 }
                               }}
                             >

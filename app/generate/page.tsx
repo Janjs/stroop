@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { StrudelSnippet } from '@/types/types'
 import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Card, CardContent } from '@/components/ui/card'
@@ -77,32 +77,31 @@ const GenerateContent = () => {
     prevNewParamRef.current = newParam
   }, [chatId, newParam])
 
-  const handleSnippetsGenerated = (newSnippets: StrudelSnippet[], _shouldReplace: boolean = false) => {
+  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], _shouldReplace: boolean = false) => {
     setSnippets(newSnippets.slice(-1))
     setError(null)
-  }
+  }, [])
 
-  const handleToolError = (message: string) => {
+  const handleToolError = useCallback((message: string) => {
     setError(message)
-  }
+  }, [])
 
-  const handleCompileError = (message: string, code: string) => {
+  const handleCompileError = useCallback((message: string, code: string) => {
     setCompileError({ message, code, id: Date.now() })
-  }
+  }, [])
 
-  const handleFixInChat = (message: string, code: string) => {
+  const handleFixInChat = useCallback((message: string, code: string) => {
     setFixRequest({ message, code, id: Date.now() })
-  }
+  }, [])
 
-  const handleToolClick = (_toolName: string, output: unknown) => {
+  const handleToolClick = useCallback((_toolName: string, output: unknown) => {
     const result = parseSnippetsFromOutput(output)
     if (result && result.length > 0) {
-      handleSnippetsGenerated(result)
+      setSnippets(result.slice(-1))
+      setError(null)
     }
-    if (isMobile) {
-      setIsDrawerOpen(true)
-    }
-  }
+    setIsDrawerOpen(true)
+  }, [])
 
   const showEditor = Boolean(snippets[0]?.code?.trim())
 
