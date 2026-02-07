@@ -130,7 +130,7 @@ const extractSnippetsFromMessages = (messages: any[]): StrudelSnippet[] => {
         }
         const result = getToolOutput(part)
         if (shouldUseToolResult(result)) {
-          snippets.push(...result.snippets)
+          snippets.push(...(result?.snippets ?? []))
         }
       }
     }
