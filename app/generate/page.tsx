@@ -80,6 +80,8 @@ const GenerateContent = () => {
   const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], _shouldReplace: boolean = false) => {
     setSnippets(newSnippets.slice(-1))
     setError(null)
+    setCompileError(null)
+    setFixRequest(null)
   }, [])
 
   const handleToolError = useCallback((message: string) => {

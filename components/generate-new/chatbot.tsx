@@ -452,6 +452,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           return
         }
         if (shouldUseToolResult(result) && onSnippetsGeneratedRef.current) {
+          setError(null)
           onSnippetsGeneratedRef.current(result!.snippets!)
           handledToolCallIdsRef.current.add(callId)
           return

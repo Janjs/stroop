@@ -116,6 +116,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, onFixI
   onCompileErrorRef.current = onCompileError
   const activeCodeRef = useRef(activeSnippet?.code)
   activeCodeRef.current = activeSnippet?.code
+  const lastSetNormalizedCodeRef = useRef<string>('')
 
 
   useEffect(() => {
@@ -307,6 +308,7 @@ ${tokenRules}
       return
     }
     const normalizedCode = normalizeStrudelCode(activeSnippet.code)
+    lastSetNormalizedCodeRef.current = normalizedCode
     if (repl.editor?.setCode) {
       repl.editor.setCode(normalizedCode)
       repl.editor.stop?.()
@@ -396,8 +398,11 @@ ${tokenRules}
         setReplError(null)
         return
       }
-      const message = error instanceof Error ? error.message : String(error)
       const code = detail?.code ?? ''
+      if (lastSetNormalizedCodeRef.current && code && code !== lastSetNormalizedCodeRef.current) {
+        return
+      }
+      const message = error instanceof Error ? error.message : String(error)
       const range = getErrorRange(error, code) ?? undefined
       const errorKey = `${message}:${range ? `${range.from}-${range.to}` : 'none'}`
       repl.editor?.stop?.()
