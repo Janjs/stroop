@@ -13,41 +13,12 @@ import StrudelCodeViewer from '@/components/strudel/strudel-code-viewer'
 
 export const dynamic = 'force-dynamic'
 
-const parseSnippetsFromOutput = (output: unknown): StrudelSnippet[] | null => {
-  if (!output) return null
-  if (typeof output === 'string') {
-    try {
-      const parsed = JSON.parse(output) as { snippets?: StrudelSnippet[]; result?: unknown; data?: unknown; output?: unknown }
-      return parsed.snippets ?? parseSnippetsFromOutput(parsed.result ?? parsed.data ?? parsed.output)
-    } catch {
-      return null
-    }
-  }
-  if (Array.isArray(output)) {
-    return output as StrudelSnippet[]
-  }
-  if (typeof output === 'object') {
-    if ('snippets' in (output as any)) {
-      return (output as { snippets?: StrudelSnippet[] }).snippets ?? null
-    }
-    if ('result' in (output as any)) {
-      return parseSnippetsFromOutput((output as { result?: unknown }).result)
-    }
-    if ('data' in (output as any)) {
-      return parseSnippetsFromOutput((output as { data?: unknown }).data)
-    }
-    if ('output' in (output as any)) {
-      return parseSnippetsFromOutput((output as { output?: unknown }).output)
-    }
-  }
-  return null
-}
-
 const GenerateContent = () => {
   const [snippets, setSnippets] = useState<StrudelSnippet[]>([])
   const [error, setError] = useState<string | null>(null)
   const [compileError, setCompileError] = useState<{ message: string; code: string; id: number } | null>(null)
   const [fixRequest, setFixRequest] = useState<{ message: string; code: string; id: number } | null>(null)
+  const [isCodeStreaming, setIsCodeStreaming] = useState(false)
   const searchParams = useSearchParams()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -77,8 +48,9 @@ const GenerateContent = () => {
     prevNewParamRef.current = newParam
   }, [chatId, newParam])
 
-  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], _shouldReplace: boolean = false) => {
+  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { isStreaming?: boolean }) => {
     setSnippets(newSnippets.slice(-1))
+    setIsCodeStreaming(options?.isStreaming ?? false)
     setError(null)
     setCompileError(null)
     setFixRequest(null)
@@ -97,10 +69,12 @@ const GenerateContent = () => {
   }, [])
 
   const handleToolClick = useCallback((_toolName: string, output: unknown) => {
-    const result = parseSnippetsFromOutput(output)
-    if (result && result.length > 0) {
-      setSnippets(result.slice(-1))
-      setError(null)
+    if (output && typeof output === 'object' && 'snippets' in (output as any)) {
+      const snippets = (output as { snippets?: StrudelSnippet[] }).snippets
+      if (snippets && snippets.length > 0) {
+        setSnippets(snippets.slice(-1))
+        setError(null)
+      }
     }
     setIsDrawerOpen(true)
   }, [])
@@ -112,6 +86,7 @@ const GenerateContent = () => {
       key={viewerKey}
       snippets={snippets}
       isLoading={snippets.length === 0 && !!prompt && !error}
+      isCodeStreaming={isCodeStreaming}
       onCompileError={handleCompileError}
       onFixInChat={handleFixInChat}
       resetKey={searchParams.get('new')}

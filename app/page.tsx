@@ -31,14 +31,18 @@ const Page = () => {
             >
               <span className="h-2.5 w-2.5 rounded-full bg-accent" />
               <span className="flex items-center gap-1 leading-none">
-                Sign up
+                <span className="font-semibold">Start coding, start jamming</span>
                 <Icons.music className="h-3.5 w-3.5" />
               </span>
           </Badge>
           )}
           <h1 className="text-3xl md:text-5xl font-bold flex flex-wrap items-start gap-x-2 gap-y-1 font-outfit">
             <span>Create playable</span>
-            <span>strudel code</span>
+            <a href="https://strudel.cc/" target="_blank" rel="noopener noreferrer" className="group inline-flex items-center gap-0.5 underline underline-offset-4 decoration-foreground/30 hover:decoration-foreground transition-colors">
+              Strudel
+              <Icons.arrowUpRight className="h-5 w-5 md:h-5 md:w-5 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </a>
+            <span>code</span>
           </h1>
           <h3 className="text-sm md:text-lg text-muted-foreground">
             Generate Strudel code snippets for live-coding music

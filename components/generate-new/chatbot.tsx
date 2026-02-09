@@ -51,78 +51,86 @@ const MOODS = ['Happy', 'Sad', 'Dreamy', 'Energetic', 'Chill', 'Melancholic', 'R
 const GENRES = ['Jazz', 'Pop', 'R&B', 'Classical', 'Lo-fi', 'Rock', 'Blues', 'Folk']
 const TEMPOS = ['70 bpm', '90 bpm', '110 bpm', '130 bpm', '150 bpm']
 
-const getToolName = (part: any): string => {
-  if (part && typeof part === 'object' && 'toolName' in part && typeof part.toolName === 'string') {
-    return part.toolName
-  }
-  if (part && typeof part.type === 'string' && part.type.startsWith('tool-')) {
-    return part.type.replace('tool-', '')
-  }
-  return ''
+const extractStrudelCode = (text: string): string | null => {
+  const marker = '```strudel\n'
+  const lastIdx = text.lastIndexOf(marker)
+  if (lastIdx === -1) return null
+  const codeStart = lastIdx + marker.length
+  const remaining = text.substring(codeStart)
+  const closingIdx = remaining.indexOf('```')
+  const code = closingIdx !== -1 ? remaining.substring(0, closingIdx) : remaining
+  return code.trim() || null
 }
 
-const parseToolResult = (value: unknown): { success?: boolean; snippets?: StrudelSnippet[]; error?: string } | null => {
-  if (!value) {
-    return null
+const splitAroundStrudelCode = (text: string): { before: string; after: string; hasCode: boolean } => {
+  const marker = '```strudel\n'
+  const idx = text.indexOf(marker)
+  if (idx === -1) return { before: text, after: '', hasCode: false }
+  const codeStart = idx + marker.length
+  const remaining = text.substring(codeStart)
+  const closingIdx = remaining.indexOf('```')
+  const after = closingIdx !== -1 ? remaining.substring(closingIdx + 3).trim() : ''
+  return { before: text.substring(0, idx).trim(), after, hasCode: true }
+}
+
+const getMessageFullText = (message: any): string => {
+  if (message.parts) {
+    return message.parts
+      .filter((p: any) => p.type === 'text' && 'text' in p)
+      .map((p: any) => p.text)
+      .join('')
   }
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value) as { success?: boolean; snippets?: StrudelSnippet[]; error?: string }
-    } catch {
-      return null
-    }
-  }
-  if (Array.isArray(value)) {
-    return { snippets: value as StrudelSnippet[] }
-  }
-  if (typeof value === 'object') {
-    const obj = value as { snippets?: StrudelSnippet[]; success?: boolean; error?: string; result?: unknown; data?: unknown; output?: unknown }
-    if ('snippets' in obj || 'success' in obj || 'error' in obj) {
-      return obj
-    }
-    if ('result' in obj && obj.result) {
-      return parseToolResult(obj.result)
-    }
-    if ('data' in obj && obj.data) {
-      return parseToolResult(obj.data)
-    }
-    if ('output' in obj && obj.output) {
-      return parseToolResult(obj.output)
+  return 'content' in message ? String(message.content || '') : ''
+}
+
+const extractCodeFromMessage = (message: any): string | null => {
+  const text = getMessageFullText(message)
+  const code = extractStrudelCode(text)
+  if (code) return code
+
+  if (message.parts) {
+    for (const part of message.parts) {
+      const isToolPart =
+        part?.type === 'tool-call' ||
+        part?.type === 'tool-invocation' ||
+        (typeof part?.type === 'string' && part.type.startsWith('tool-'))
+      if (!isToolPart) continue
+
+      const output = part.output ?? part.result ?? part.toolInvocation?.result
+      if (!output) continue
+
+      const parsed = typeof output === 'string'
+        ? (() => { try { return JSON.parse(output) } catch { return null } })()
+        : output
+      if (parsed?.snippets?.[0]?.code) return parsed.snippets[0].code
     }
   }
   return null
-}
-
-const getToolOutput = (part: any): { success?: boolean; snippets?: StrudelSnippet[]; error?: string } | null => {
-  if (part && typeof part === 'object' && 'output' in part && part.output) {
-    return parseToolResult(part.output)
-  }
-  if (part && typeof part === 'object' && 'result' in part && part.result) {
-    return parseToolResult(part.result)
-  }
-  return null
-}
-
-const shouldUseToolResult = (result: { success?: boolean; snippets?: StrudelSnippet[]; error?: string } | null) => {
-  if (!result || !result.snippets || result.snippets.length === 0) {
-    return false
-  }
-  return result.success !== false
 }
 
 const extractSnippetsFromMessages = (messages: any[]): StrudelSnippet[] => {
   const snippets: StrudelSnippet[] = []
   for (const m of messages) {
-    if (m.role === 'assistant' && m.parts) {
+    if (m.role !== 'assistant') continue
+    const text = getMessageFullText(m)
+    const code = extractStrudelCode(text)
+    if (code) snippets.push({ code })
+
+    if (m.parts) {
       for (const part of m.parts) {
-        const toolName = getToolName(part)
-        if (!toolName || toolName !== 'generateStrudelCode') {
-          continue
-        }
-        const result = getToolOutput(part)
-        if (shouldUseToolResult(result)) {
-          snippets.push(...(result?.snippets ?? []))
-        }
+        const isToolPart =
+          part?.type === 'tool-call' ||
+          part?.type === 'tool-invocation' ||
+          (typeof part?.type === 'string' && part.type.startsWith('tool-'))
+        if (!isToolPart) continue
+
+        const output = part.output ?? part.result ?? part.toolInvocation?.result
+        if (!output) continue
+
+        const parsed = typeof output === 'string'
+          ? (() => { try { return JSON.parse(output) } catch { return null } })()
+          : output
+        if (parsed?.snippets?.length) snippets.push(...parsed.snippets)
       }
     }
   }
@@ -253,7 +261,7 @@ function ConversationWithFade({ children, className, onViewportReady }: { childr
 interface ChatbotProps {
   prompt?: string
   chatId?: string
-  onSnippetsGenerated?: (snippets: StrudelSnippet[], shouldReplace?: boolean) => void
+  onSnippetsGenerated?: (snippets: StrudelSnippet[], options?: { isStreaming?: boolean }) => void
   onToolError?: (message: string) => void
   onChatCreated?: (chatId: string) => void
   compileError?: { message: string; code: string; id: number } | null
@@ -281,6 +289,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const lastSnippetScopeKeyRef = useRef<string | null>(null)
 
   const [isTyping, setIsTyping] = useState(false)
+  const lastStreamedCodeRef = useRef<string | null>(null)
+  const codeUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const onSnippetsGeneratedRef = useRef(onSnippetsGenerated)
   onSnippetsGeneratedRef.current = onSnippetsGenerated
@@ -315,9 +325,9 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const { messages, sendMessage: rawSendMessage, status, setMessages } = useChat({
     api: '/api/chat',
     onFinish: async (message: any) => {
-      const finishSnippets = extractSnippetsFromMessages([message as any])
-      if (finishSnippets.length > 0) {
-        onSnippetsGeneratedRef.current?.(finishSnippets)
+      const code = extractCodeFromMessage(message)
+      if (code) {
+        onSnippetsGeneratedRef.current?.([{ code }])
       }
       // Create a new chat if we don't have one, only for authenticated users
       if (isAuthenticated && !chatId && !currentChatIdRef.current) {
@@ -379,7 +389,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
           const snippets = extractSnippetsFromMessages(messagesToSave)
           if (snippets.length > 0) {
-            onSnippetsGeneratedRef.current?.(snippets, true)
+            onSnippetsGeneratedRef.current?.(snippets)
           }
 
           // Create chat mutation
@@ -417,49 +427,55 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   messagesRef.current = messages
 
   useEffect(() => {
+    if (status === 'streaming') return
+
     const snippetScopeKey = `${chatId || 'new'}:${resetKey || 'none'}`
     if (lastSnippetScopeKeyRef.current !== snippetScopeKey) {
       lastSnippetScopeKeyRef.current = snippetScopeKey
-      if (messages.length === 0) {
+      if (messages.length === 0) return
+    }
+
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i]
+      if (!message || message.role !== 'assistant') continue
+      const code = extractCodeFromMessage(message)
+      if (code) {
+        onSnippetsGeneratedRef.current?.([{ code }])
         return
       }
     }
-    for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-      const message = messages[messageIndex]
-      if (!message || message.role !== 'assistant') {
-        continue
+  }, [messages, chatId, resetKey, status])
+
+  useEffect(() => {
+    if (status !== 'streaming') {
+      if (codeUpdateTimerRef.current) {
+        clearTimeout(codeUpdateTimerRef.current)
+        codeUpdateTimerRef.current = null
       }
-      if (!message.parts) {
-        continue
+      if (lastStreamedCodeRef.current) {
+        onSnippetsGeneratedRef.current?.([{ code: lastStreamedCodeRef.current }])
+        lastStreamedCodeRef.current = null
       }
-      for (let partIndex = message.parts.length - 1; partIndex >= 0; partIndex -= 1) {
-        const part = message.parts[partIndex]
-        const toolName = getToolName(part)
-        if (!toolName || toolName !== 'generateStrudelCode') {
-          continue
-        }
-        const callId = 'toolCallId' in part && typeof part.toolCallId === 'string'
-          ? part.toolCallId
-          : `${message.id}-${partIndex}`
-        if (handledToolCallIdsRef.current.has(callId)) {
-          continue
-        }
-        const result = getToolOutput(part)
-        if (result?.error) {
-          setError(result.error)
-          onToolErrorRef.current?.(result.error)
-          handledToolCallIdsRef.current.add(callId)
-          return
-        }
-        if (shouldUseToolResult(result) && onSnippetsGeneratedRef.current) {
-          setError(null)
-          onSnippetsGeneratedRef.current(result!.snippets!)
-          handledToolCallIdsRef.current.add(callId)
-          return
-        }
-      }
+      return
     }
-  }, [messages, chatId, resetKey])
+
+    const lastMessage = messages[messages.length - 1]
+    if (!lastMessage || lastMessage.role !== 'assistant') return
+
+    const code = extractCodeFromMessage(lastMessage)
+    if (!code || code === lastStreamedCodeRef.current) return
+
+    lastStreamedCodeRef.current = code
+
+    if (!codeUpdateTimerRef.current) {
+      codeUpdateTimerRef.current = setTimeout(() => {
+        codeUpdateTimerRef.current = null
+        if (lastStreamedCodeRef.current) {
+          onSnippetsGeneratedRef.current?.([{ code: lastStreamedCodeRef.current }], { isStreaming: true })
+        }
+      }, 80)
+    }
+  }, [messages, status])
 
   // Load existing chat
   useEffect(() => {
@@ -480,7 +496,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           }
           setMessages(existingChat.messages as any)
           if (existingChat.snippets && existingChat.snippets.length > 0) {
-            onSnippetsGeneratedRef.current?.(existingChat.snippets, true)
+            onSnippetsGeneratedRef.current?.(existingChat.snippets)
           }
         }
       }
@@ -603,7 +619,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       setMessages([])
       setError(null)
       setIsSuggestionsOpen(true)
-      onSnippetsGeneratedRef.current?.([], true)
+      onSnippetsGeneratedRef.current?.([])
       currentChatIdRef.current = null
       lastSnippetScopeKeyRef.current = null
 
@@ -834,65 +850,116 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                     key={message.id}
                     className="flex flex-col gap-2"
                   >
-                    {message.parts ? (
-                      message.parts.map((part, i) => {
-                        if (part.type === 'text' && 'text' in part) {
-                          return (
-                            <Message key={`${message.id}-${i}`} from={message.role}>
+                    {(() => {
+                      const fullText = getMessageFullText(message)
+                      const { before, after, hasCode } = message.role === 'assistant'
+                        ? splitAroundStrudelCode(fullText)
+                        : { before: fullText, after: '', hasCode: false }
+                      const isCodeStreamingNow = hasCode && isLastMessage && status === 'streaming'
+
+                      if (message.role === 'assistant' && hasCode) {
+                        return (
+                          <>
+                            {before && (
+                              <Message from="assistant">
+                                <MessageContent>
+                                  <MessageResponse>{before}</MessageResponse>
+                                </MessageContent>
+                              </Message>
+                            )}
+                            <div
+                              className={`flex items-center gap-2 p-3 rounded-md border bg-muted/30 transition-shadow ${isCodeStreamingNow ? 'shadow-[0_0_15px_hsl(var(--primary)/0.4)] animate-pulse' : 'cursor-pointer hover:bg-muted/50'}`}
+                              onClick={() => {
+                                if (!isCodeStreamingNow) {
+                                  const code = extractStrudelCode(fullText)
+                                  if (code) {
+                                    onSnippetsGeneratedRef.current?.([{ code }])
+                                    onToolClickRef.current?.('generateStrudelCode', { snippets: [{ code }] })
+                                  }
+                                }
+                              }}
+                            >
+                              <Icons.music className={`size-5 ${isCodeStreamingNow ? 'opacity-50' : ''}`} />
+                              <span className="text-sm font-medium">
+                                {isCodeStreamingNow ? 'Generating Strudel Code...' : 'Generated Strudel Code'}
+                              </span>
+                            </div>
+                            {after && (
+                              <Message from="assistant">
+                                <MessageContent>
+                                  <MessageResponse>{after}</MessageResponse>
+                                </MessageContent>
+                              </Message>
+                            )}
+                            {showTypingIndicator && (
+                              <div className="text-left pl-2">
+                                <Icons.music className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
+                              </div>
+                            )}
+                          </>
+                        )
+                      }
+
+                      return (
+                        <>
+                          {message.parts ? (
+                            message.parts.map((part, i) => {
+                              if (part.type === 'text' && 'text' in part) {
+                                if (!part.text.trim()) return null
+                                return (
+                                  <Message key={`${message.id}-${i}`} from={message.role}>
+                                    <MessageContent>
+                                      <MessageResponse>{part.text}</MessageResponse>
+                                      {showTypingIndicator && i === (message.parts?.length ?? 0) - 1 && (
+                                        <div className="text-left">
+                                          <Icons.music className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
+                                        </div>
+                                      )}
+                                    </MessageContent>
+                                  </Message>
+                                )
+                              }
+                              if (
+                                (part.type === 'tool-call' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
+                                'state' in part &&
+                                'input' in part
+                              ) {
+                                const isLoading = part.state === 'input-streaming' || part.state === 'input-available'
+                                const isCompleted = part.state === 'output-available'
+                                return (
+                                  <div
+                                    key={i}
+                                    className={`flex items-center gap-2 p-3 rounded-md border bg-muted/30 transition-shadow ${isLoading ? 'shadow-[0_0_15px_hsl(var(--primary)/0.4)] animate-pulse' : ''} ${isCompleted ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                                    onClick={() => {
+                                      if (isCompleted && onToolClickRef.current && 'output' in part) {
+                                        onToolClickRef.current('generateStrudelCode', part.output)
+                                      }
+                                    }}
+                                  >
+                                    <Icons.music className={`size-5 ${isLoading ? 'opacity-50' : ''}`} />
+                                    <span className="text-sm font-medium">
+                                      {isLoading ? 'Generating Strudel Code...' : isCompleted ? 'Generated Strudel Code' : 'Strudel Code Tool'}
+                                    </span>
+                                  </div>
+                                )
+                              }
+                              return null
+                            })
+                          ) : (
+                            <Message from={message.role}>
                               <MessageContent>
-                                <MessageResponse>
-                                  {part.text}
-                                </MessageResponse>
-                                {showTypingIndicator && i === (message.parts?.length ?? 0) - 1 && (
+                                <MessageResponse>{before}</MessageResponse>
+                                {showTypingIndicator && (
                                   <div className="text-left">
                                     <Icons.music className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
                                   </div>
                                 )}
                               </MessageContent>
                             </Message>
-                          )
-                        }
-                        if (
-                          (part.type === 'tool-call' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
-                          'state' in part &&
-                          'input' in part
-                        ) {
-                          const isLoading = part.state === 'input-streaming' || part.state === 'input-available'
-                          const isCompleted = part.state === 'output-available'
-                          const ToolIcon = Icons.music
-                          return (
-                            <div
-                              key={i}
-                              className={`flex items-center gap-2 p-3 rounded-md border bg-muted/30 transition-shadow ${isLoading ? 'shadow-[0_0_15px_hsl(var(--primary)/0.4)] animate-pulse' : ''} ${isCompleted ? 'cursor-pointer hover:bg-muted/50' : ''}`}
-                              onClick={() => {
-                                if (isCompleted && onToolClickRef.current && 'output' in part) {
-                                  onToolClickRef.current('generateStrudelCode', part.output)
-                                }
-                              }}
-                            >
-                              <ToolIcon className={`size-5 ${isLoading ? 'opacity-50' : ''}`} />
-                              <span className="text-sm font-medium">
-                                {isLoading ? 'Generating Strudel Code...' : isCompleted ? 'Generated Strudel Code' : 'Strudel Code Tool'}
-                              </span>
-                            </div>
-                          )
-                        }
-                        return null
-                      })
-                    ) : (
-                      <Message from={message.role}>
-                        <MessageContent>
-                          <MessageResponse>
-                            {'content' in message ? String(message.content || '') : ''}
-                          </MessageResponse>
-                          {showTypingIndicator && (
-                            <div className="text-left">
-                              <Icons.music className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
-                            </div>
                           )}
-                        </MessageContent>
-                      </Message>
-                    )}
+                        </>
+                      )
+                    })()}
                   </div>
                 )
               })

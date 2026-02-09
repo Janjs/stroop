@@ -30,11 +30,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" suppressHydrationWarning className={outfit.variable}>
       <head>
-       {/* <script
+       <script
           async
           crossOrigin="anonymous"
           src="https://tweakcn.com/live-preview.min.js"
-        />  */}
+        /> 
       </head>
       <body className="font-sans">
         <ConvexAuthNextjsServerProvider apiRoute="/api/auth">

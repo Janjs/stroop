@@ -12,6 +12,7 @@ import { useTheme } from 'next-themes'
 interface StrudelCodeViewerProps {
   snippets: StrudelSnippet[]
   isLoading?: boolean
+  isCodeStreaming?: boolean
   onCompileError?: (message: string, code: string) => void
   onFixInChat?: (message: string, code: string) => void
   resetKey?: string | null
@@ -95,7 +96,7 @@ const getErrorRange = (error: unknown, code: string) => {
   return null
 }
 
-const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, onFixInChat, resetKey }: StrudelCodeViewerProps) => {
+const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = false, onCompileError, onFixInChat, resetKey }: StrudelCodeViewerProps) => {
   const activeSnippet = snippets[0]
   const hasSnippet = Boolean(activeSnippet?.code?.trim())
   const [isCleared, setIsCleared] = useState(false)
@@ -265,6 +266,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, onCompileError, onFixI
 #strudel-repl-container .cm-scroller{background-color:${bg} !important;}
 #strudel-repl-container .cm-content{color:${fg} !important;}
 #strudel-repl-container .cm-gutters{background-color:${muted} !important;border-color:${border};min-height:100%;}
+#strudel-repl-container .cm-gutterElement{min-width:3ch;text-align:right;}
 #strudel-repl-container .cm-activeLineGutter{background-color:${accent} !important;color:${accentFg} !important;}
 #strudel-repl-container .cm-activeLine{background-color:${muted} !important;}
 #strudel-repl-container .cm-selectionMatch,#strudel-repl-container .cm-selectionBackground{background-color:${accent} !important;}
@@ -311,18 +313,19 @@ ${tokenRules}
     lastSetNormalizedCodeRef.current = normalizedCode
     if (repl.editor?.setCode) {
       repl.editor.setCode(normalizedCode)
-      repl.editor.stop?.()
-      setIsPlaying(false)
     } else {
       repl.setAttribute('code', normalizedCode)
-      repl.editor?.stop?.()
-      setIsPlaying(false)
     }
+
+    if (isCodeStreaming) return
+
+    repl.editor?.stop?.()
+    setIsPlaying(false)
     setReplError(null)
     window.requestAnimationFrame(() => {
       const scroller = repl.shadowRoot?.querySelector('.cm-scroller')
       if (scroller instanceof HTMLElement) {
-        scroller.scrollTop = 0
+        scroller.scrollTop = scroller.scrollHeight
       }
     })
     window.requestAnimationFrame(() => {
@@ -345,7 +348,7 @@ ${tokenRules}
         }
       }
     })
-  }, [activeSnippet?.code, isEditorReady])
+  }, [activeSnippet?.code, isEditorReady, isCodeStreaming])
 
   useEffect(() => {
     const repl = replRef.current
@@ -461,7 +464,7 @@ ${tokenRules}
       <CardContent className="flex-1 min-h-0 flex flex-col p-0">
         {!hasSnippet || isCleared ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            {isLoading ? 'Generating Strudel code...' : 'Your Strudel code will appear here.'}
+            {isLoading ? 'Waiting for code...' : 'Your Strudel code will appear here.'}
           </div>
         ) : (
           <>

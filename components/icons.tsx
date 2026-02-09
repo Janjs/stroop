@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowUp,
+  ArrowUpRight,
   CassetteTape,
   Command,
   HelpCircle,
@@ -67,6 +68,7 @@ export const Icons = {
   signOut: LogOut,
   externalLink: ExternalLink,
   feedback: MessageSquare,
+  arrowUpRight: ArrowUpRight,
   lightbulb: Lightbulb,
   gitHub: ({ ...props }: LucideProps) => (
     <svg
