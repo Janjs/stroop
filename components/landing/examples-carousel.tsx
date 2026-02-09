@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Icons } from '@/components/icons'
 import { cn } from '@/lib/utils'
+import { useTheme } from 'next-themes'
 import '@strudel/repl'
 
 if (typeof window !== 'undefined') {
@@ -283,7 +284,11 @@ export default function ExamplesCarousel() {
   const [count, setCount] = useState(0)
   const [playingIndex, setPlayingIndex] = useState<number | null>(null)
   const [isEditorReady, setIsEditorReady] = useState(false)
-  const replRef = useRef<StrudelEditorElement | null>(null)
+  const [mounted, setMounted] = useState(false)
+  const editorRefs = useRef<(StrudelEditorElement | null)[]>([])
+  const { resolvedTheme } = useTheme()
+
+  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
     if (!api) return
@@ -294,20 +299,29 @@ export default function ExamplesCarousel() {
 
   useEffect(() => {
     let frameId = 0
-    const checkReady = () => {
-      if (replRef.current?.editor) {
+    const init = () => {
+      const allReady = EXAMPLES.every((_, i) => editorRefs.current[i]?.editor)
+      if (allReady) {
         setIsEditorReady(true)
+        EXAMPLES.forEach((example, i) => {
+          const repl = editorRefs.current[i]
+          if (repl?.editor?.setCode) {
+            repl.editor.setCode(example.fullCode)
+          }
+        })
         return
       }
-      frameId = window.requestAnimationFrame(checkReady)
+      frameId = window.requestAnimationFrame(init)
     }
-    frameId = window.requestAnimationFrame(checkReady)
+    frameId = window.requestAnimationFrame(init)
     return () => window.cancelAnimationFrame(frameId)
   }, [])
 
   useEffect(() => {
     if (playingIndex !== null && playingIndex !== current) {
-      replRef.current?.editor?.stop?.()
+      const repl = editorRefs.current[playingIndex]
+      repl?.editor?.stop?.()
+      if (repl?.editor?.setCode) repl.editor.setCode(EXAMPLES[playingIndex].fullCode)
       setPlayingIndex(null)
     }
   }, [current, playingIndex])
@@ -317,28 +331,83 @@ export default function ExamplesCarousel() {
     [api],
   )
 
+  useEffect(() => {
+    if (!isEditorReady || !resolvedTheme) return
+    const apply = () => {
+      const root = getComputedStyle(document.documentElement)
+      const get = (v: string) => root.getPropertyValue(v).trim() || 'inherit'
+      const fg = get('--foreground')
+      const fontMono = get('--font-mono') || 'monospace'
+      const primary = get('--primary')
+      const accent = get('--accent')
+      const secondary = get('--secondary')
+      const mutedFg = get('--muted-foreground')
+      const ring = get('--ring')
+      const isDark = resolvedTheme === 'dark'
+      const pastel = (color: string) =>
+        isDark ? `color-mix(in oklab, ${color} 40%, ${fg})` : `color-mix(in oklab, ${color} 70%, ${fg})`
+      const palette = [pastel(primary), pastel(accent), pastel(secondary), pastel(mutedFg), pastel(ring), pastel(fg)]
+      const cmTokenChar = '\u037C'
+      const tokenClasses = new Set<string>()
+      for (const sheet of document.styleSheets) {
+        try {
+          for (const rule of sheet.cssRules) {
+            const r = rule as CSSStyleRule
+            if (r.selectorText?.includes(cmTokenChar) && r.style?.color) {
+              r.selectorText.match(new RegExp(`${cmTokenChar}[\\da-zA-Z]+`, 'g'))?.forEach((m) => tokenClasses.add(m))
+            }
+          }
+        } catch (_) {}
+      }
+      let tokenRules = ''
+      let idx = 0
+      tokenClasses.forEach((cls) => {
+        tokenRules += `.strudel-example-editor .cm-editor .${cls}{color:${palette[idx % palette.length]} !important;}`
+        idx += 1
+      })
+      const id = 'strudel-example-theme'
+      let styleEl = document.getElementById(id) as HTMLStyleElement | null
+      if (!styleEl) {
+        styleEl = document.createElement('style')
+        styleEl.id = id
+      }
+      styleEl.textContent = `
+.strudel-example-editor .cm-editor,.strudel-example-editor .cm-scroller,.strudel-example-editor .cm-content,.strudel-example-editor .cm-line{font-family:${fontMono};font-weight:500;font-size:11px;}
+.strudel-example-editor .cm-editor{background-color:transparent !important;color:${fg} !important;height:100%;}
+.strudel-example-editor .cm-scroller{background-color:transparent !important;overflow:auto !important;}
+.strudel-example-editor .cm-content{color:${fg} !important;padding:12px;}
+.strudel-example-editor .cm-gutters{display:none !important;}
+.strudel-example-editor .cm-activeLine{background:transparent !important;}
+.strudel-example-editor .cm-editor.cm-focused{outline:none;}
+.strudel-example-editor .cm-cursor{border-left-color:${fg};}
+.strudel-example-editor .cm-editor .cm-flash{background-color:hsl(0 84% 60% / 0.25) !important;outline:1px solid hsl(0 84% 60% / 0.5);border-radius:2px;}
+${tokenRules}
+`
+      document.head.appendChild(styleEl)
+    }
+    const raf = window.requestAnimationFrame(() => apply())
+    const late = window.setTimeout(() => apply(), 300)
+    return () => {
+      window.cancelAnimationFrame(raf)
+      window.clearTimeout(late)
+      document.getElementById('strudel-example-theme')?.remove()
+    }
+  }, [isEditorReady, resolvedTheme])
+
   const handleTogglePlay = async (index: number) => {
-    const repl = replRef.current
-    if (!repl?.editor) return
+    if (playingIndex !== null) {
+      const prev = editorRefs.current[playingIndex]
+      prev?.editor?.stop?.()
+      if (prev?.editor?.setCode) prev.editor.setCode(EXAMPLES[playingIndex].fullCode)
+    }
 
     if (playingIndex === index) {
-      repl.editor.stop?.()
       setPlayingIndex(null)
       return
     }
 
-    if (playingIndex !== null) {
-      repl.editor.stop?.()
-    }
-
-    const example = EXAMPLES[index]
-    const code = example.fullCode
-
-    if (repl.editor.setCode) {
-      repl.editor.setCode(code)
-    } else {
-      repl.setAttribute('code', code)
-    }
+    const repl = editorRefs.current[index]
+    if (!repl?.editor) return
 
     try {
       const result = repl.editor.evaluate?.()
@@ -354,9 +423,6 @@ export default function ExamplesCarousel() {
 
   return (
     <div className="flex w-full flex-col gap-3 mb-8 md:mb-0">
-      <div className="absolute w-0 h-0 overflow-hidden pointer-events-none" aria-hidden="true">
-        {createElement('strudel-editor', { ref: replRef })}
-      </div>
       <div className="flex items-center gap-2 text-muted-foreground px-1">
         <Icons.music className="h-4 w-4" />
         <span className="text-sm font-medium">Examples</span>
@@ -398,7 +464,7 @@ export default function ExamplesCarousel() {
                   </p>
                 </CardHeader>
                 <CardContent className="px-5 pb-4 space-y-3">
-                  <div className="relative rounded-md bg-muted/60 overflow-hidden">
+                  <div className="strudel-example-editor relative rounded-md bg-muted/60 overflow-hidden">
                     <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-border/40">
                       <span className="h-2 w-2 rounded-full bg-red-400/60" />
                       <span className="h-2 w-2 rounded-full bg-yellow-400/60" />
@@ -407,10 +473,12 @@ export default function ExamplesCarousel() {
                         strudel
                       </span>
                     </div>
-                    <pre className="p-3 text-xs leading-relaxed font-mono text-foreground/80 overflow-hidden max-h-[200px]">
-                      <code>{example.code}</code>
-                    </pre>
-                    <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-muted/60 to-transparent pointer-events-none" />
+                    <div className="max-h-[180px] overflow-y-auto">
+                      {mounted && createElement('strudel-editor', {
+                        ref: (el: StrudelEditorElement | null) => { editorRefs.current[i] = el },
+                        className: 'w-full h-0 min-h-0 overflow-hidden',
+                      })}
+                    </div>
                   </div>
                   <Link
                     href={`/generate?prompt=${encodeURIComponent(example.prompt)}`}
