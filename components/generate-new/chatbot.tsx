@@ -879,7 +879,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                                 }
                               }}
                             >
-                              <Icons.music className={`size-5 ${isCodeStreamingNow ? 'opacity-50' : ''}`} />
+                              <Icons.chatbotLogo className={`size-5 ${isCodeStreamingNow ? 'opacity-50' : ''}`} />
                               <span className="text-sm font-medium">
                                 {isCodeStreamingNow ? 'Generating Strudel Code...' : 'Generated Strudel Code'}
                               </span>
@@ -893,7 +893,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                             )}
                             {showTypingIndicator && (
                               <div className="text-left pl-2">
-                                <Icons.music className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
+                                <Icons.chatbotLogo className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
                               </div>
                             )}
                           </>
@@ -912,7 +912,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                                       <MessageResponse>{part.text}</MessageResponse>
                                       {showTypingIndicator && i === (message.parts?.length ?? 0) - 1 && (
                                         <div className="text-left">
-                                          <Icons.music className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
+                                          <Icons.chatbotLogo className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
                                         </div>
                                       )}
                                     </MessageContent>
@@ -936,7 +936,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                                       }
                                     }}
                                   >
-                                    <Icons.music className={`size-5 ${isLoading ? 'opacity-50' : ''}`} />
+                                    <Icons.chatbotLogo className={`size-5 ${isLoading ? 'opacity-50' : ''}`} />
                                     <span className="text-sm font-medium">
                                       {isLoading ? 'Generating Strudel Code...' : isCompleted ? 'Generated Strudel Code' : 'Strudel Code Tool'}
                                     </span>
@@ -951,7 +951,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                                 <MessageResponse>{before}</MessageResponse>
                                 {showTypingIndicator && (
                                   <div className="text-left">
-                                    <Icons.music className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
+                                    <Icons.chatbotLogo className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
                                   </div>
                                 )}
                               </MessageContent>

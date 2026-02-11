@@ -1,4 +1,4 @@
-# Stroop 🎵
+# stroop 🎵
 
 An AI-powered Strudel code generator that helps musicians discover fresh rhythmic and melodic ideas. Whether you're sketching a groove or live-coding a set, Stroop keeps your creativity flowing.
 

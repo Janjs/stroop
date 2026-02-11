@@ -331,6 +331,10 @@
   font-family: var(--font-outfit);
 }
 
+.font-fascinate {
+  font-family: var(--font-fascinate);
+}
+
 strudel-editor + div {
   flex: 1 1 auto;
   min-height: 0;

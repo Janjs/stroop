@@ -134,9 +134,9 @@ export function AppSidebar() {
             >
               <Link href="/" className="flex items-center min-h-12 ml-1 gap-2">
                 <div className="flex aspect-square items-center justify-center">
-                  <Icons.music className="size-6.5" />
+                  <Icons.logo className="size-6.5" />
                 </div>
-                <span className="text-sm font-medium">Stroop</span>
+                <span className="text-2xl font-outfit">Stroop</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

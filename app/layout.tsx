@@ -9,17 +9,23 @@ import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 
 export const metadata = {
-  title: 'Stroop',
+  title: 'stroop',
   description: 'Strudel Code Generator',
   content: 'width=device-width, initial-scale=1',
   name: 'viewport',
 }
 
-import { Outfit } from 'next/font/google'
+import { Outfit, Fascinate } from 'next/font/google'
 
 const outfit = Outfit({
   subsets: ['latin'],
   variable: '--font-outfit',
+})
+
+const fascinate = Fascinate({
+  weight: '400',
+  subsets: ['latin'],
+  variable: '--font-fascinate',
 })
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -28,7 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const defaultOpen = sidebarState ? sidebarState === 'true' : false
 
   return (
-    <html lang="en" suppressHydrationWarning className={outfit.variable}>
+    <html lang="en" suppressHydrationWarning className={`${outfit.variable} ${fascinate.variable}`}>
       <head>
        <script
           async

@@ -38,9 +38,9 @@ export default function Header() {
           {!isAuthenticated && !isGeneratePage && (
             <Link href="/" className="flex items-center gap-2 mr-4">
               <div className="flex aspect-square items-center justify-center">
-                <Icons.music className="size-6.5" />
+                <Icons.logo className="size-6.5" />
               </div>
-              <span className="text-sm font-medium">Stroop</span>
+              <span className="text-2xl font-outfit">stroop</span>
             </Link>
           )}
           {displayPrompt ? (
