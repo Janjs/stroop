@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { useConvexAuth } from 'convex/react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { usePathname, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 
 const Page = () => {
   const { isAuthenticated, isLoading } = useConvexAuth()
@@ -24,6 +25,19 @@ const Page = () => {
     <div className="flex min-h-[calc(100dvh-60px)] w-full max-w-full md:items-center justify-center px-4 py-8 md:px-8 lg:px-12">
       <div className="flex w-full max-w-6xl flex-col gap-12 md:flex-row md:items-center md:gap-10 lg:gap-16">
         <div className="flex flex-col gap-4 md:w-[55%]">
+          <Link
+            href="https://chordwise.chat"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Badge
+              variant="outline"
+              className="flex h-7 w-fit cursor-pointer items-center gap-2 border-foreground/20 bg-card/80 shadow-sm backdrop-blur transition-colors hover:bg-card/90"
+            >
+              <span className="leading-none">Try chordwise too!</span>
+              <Icons.chordwiseMascot className="h-4 w-4 shrink-0" />
+            </Badge>
+          </Link>
           {!isLoading && !isAuthenticated && (
             <Badge
               className="flex h-7 w-fit border border-foreground/20 items-center gap-2 bg-card/80 text-foreground shadow-sm backdrop-blur cursor-pointer hover:bg-card/90 transition-colors"

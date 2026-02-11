@@ -202,7 +202,6 @@ export function AppSidebar() {
                                       )}
                                     >
                                       <Link href={`/generate?chatId=${chat._id}&title=${encodeURIComponent(chat.title)}`}>
-                                        <Icons.music className="size-4" />
                                         <span>{chat.title}</span>
                                       </Link>
                                     </SidebarMenuButton>
