@@ -54,7 +54,10 @@ const GenerateContent = () => {
     setError(null)
     setCompileError(null)
     setFixRequest(null)
-  }, [])
+    if (isMobile && newSnippets.some((snippet) => Boolean(snippet.code?.trim()))) {
+      setIsDrawerOpen(true)
+    }
+  }, [isMobile])
 
   const handleToolError = useCallback((message: string) => {
     setError(message)
