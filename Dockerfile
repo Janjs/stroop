@@ -5,7 +5,7 @@ WORKDIR /app
 FROM base AS deps
 RUN apk add --no-cache git
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml* ./
-RUN corepack enable pnpm && pnpm i --frozen-lockfile
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm i --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
@@ -14,7 +14,7 @@ COPY . .
 RUN mkdir -p public
 ARG NEXT_PUBLIC_CONVEX_URL=https://placeholder.convex.cloud
 ENV NEXT_PUBLIC_CONVEX_URL=$NEXT_PUBLIC_CONVEX_URL
-RUN corepack enable pnpm && pnpm run build
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm run build
 
 FROM base AS runner
 WORKDIR /app
