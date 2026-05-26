@@ -108,7 +108,6 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   const [replError, setReplError] = useState<{ message: string; range?: { from: number; to: number } } | null>(null)
   const copyTimeoutRef = useRef<number | null>(null)
   const { resolvedTheme } = useTheme()
-  const baseHtmlClassesRef = useRef<string[]>([])
   const lastErrorKeyRef = useRef<string | null>(null)
   const lastCompileErrorKeyRef = useRef<string | null>(null)
   const strudelThemeSourceRef = useRef('')
@@ -119,13 +118,6 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   activeCodeRef.current = activeSnippet?.code
   const lastSetNormalizedCodeRef = useRef<string>('')
 
-
-  useEffect(() => {
-    const html = document.documentElement
-    if (!baseHtmlClassesRef.current.length) {
-      baseHtmlClassesRef.current = Array.from(html.classList).filter((item) => item !== 'light' && item !== 'dark')
-    }
-  }, [])
 
   useEffect(() => {
     const cacheAndNeutralize = (styleEl: HTMLStyleElement) => {
@@ -163,21 +155,10 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   useEffect(() => {
     if (!resolvedTheme) return
     const html = document.documentElement
-    const themeClass = resolvedTheme === 'dark' ? 'dark' : 'light'
-    const applyTheme = () => {
-      html.className = [...baseHtmlClassesRef.current, themeClass].join(' ')
-    }
-    applyTheme()
-    const observer = new MutationObserver(() => {
-      const hasTheme = html.classList.contains(themeClass)
-      const hasBase = baseHtmlClassesRef.current.every((item) => html.classList.contains(item))
-      if (!hasTheme || !hasBase) {
-        applyTheme()
-      }
-    })
-    observer.observe(html, { attributes: true, attributeFilter: ['class'] })
-    return () => observer.disconnect()
-  }, [resolvedTheme])
+    const shouldBeDark = resolvedTheme === 'dark'
+    html.classList.toggle('dark', shouldBeDark)
+    html.classList.remove('light')
+  }, [resolvedTheme, isEditorReady, isCodeStreaming, activeSnippet?.code])
 
   useEffect(() => {
     let frameId = 0
