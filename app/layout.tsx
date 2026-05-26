@@ -7,6 +7,7 @@ import ConvexClientProvider from '@/lib/convex-client'
 import { ConvexAuthNextjsServerProvider } from '@convex-dev/auth/nextjs/server'
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
+import { themeInitScript } from '@/lib/theme-script'
 
 export const metadata = {
   title: 'stroop',
@@ -36,16 +37,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" suppressHydrationWarning className={`${outfit.variable} ${fascinate.variable}`}>
       <head>
-       <script
-          async
-          crossOrigin="anonymous"
-          src="https://tweakcn.com/live-preview.min.js"
-        /> 
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="font-sans">
         <ConvexAuthNextjsServerProvider apiRoute="/api/auth">
           <ConvexClientProvider>
-            <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+            <ThemeProvider>
               <SidebarProvider defaultOpen={defaultOpen} style={{ '--sidebar-width': '13rem' } as React.CSSProperties}>
                 <AppSidebar />
                 <SidebarInset>

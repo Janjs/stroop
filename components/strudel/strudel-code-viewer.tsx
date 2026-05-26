@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Check, Copy, MessageSquare, Minus, Pause, Play, Plus } from 'lucide-react'
-import '@strudel/repl'
+import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
 import { useTheme } from 'next-themes'
 
 interface StrudelCodeViewerProps {
@@ -110,7 +110,6 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   const { resolvedTheme } = useTheme()
   const lastErrorKeyRef = useRef<string | null>(null)
   const lastCompileErrorKeyRef = useRef<string | null>(null)
-  const strudelThemeSourceRef = useRef('')
   const [fontSize, setFontSize] = useState(14)
   const onCompileErrorRef = useRef(onCompileError)
   onCompileErrorRef.current = onCompileError
@@ -118,47 +117,9 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   activeCodeRef.current = activeSnippet?.code
   const lastSetNormalizedCodeRef = useRef<string>('')
 
-
   useEffect(() => {
-    const cacheAndNeutralize = (styleEl: HTMLStyleElement) => {
-      if (styleEl.textContent?.trim()) {
-        strudelThemeSourceRef.current = styleEl.textContent
-        styleEl.textContent = ''
-      }
-    }
-    const observer = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        if (m.type === 'childList') {
-          for (const node of m.addedNodes) {
-            if (node instanceof HTMLStyleElement && node.id === 'strudel-theme-vars') {
-              cacheAndNeutralize(node)
-              return
-            }
-          }
-        }
-        if (
-          m.type === 'characterData' &&
-          m.target.parentElement instanceof HTMLStyleElement &&
-          m.target.parentElement.id === 'strudel-theme-vars'
-        ) {
-          cacheAndNeutralize(m.target.parentElement)
-          return
-        }
-      }
-    })
-    observer.observe(document.head, { childList: true, subtree: true, characterData: true })
-    const existing = document.getElementById('strudel-theme-vars')
-    if (existing instanceof HTMLStyleElement) cacheAndNeutralize(existing)
-    return () => observer.disconnect()
+    void loadStrudelRepl()
   }, [])
-
-  useEffect(() => {
-    if (!resolvedTheme) return
-    const html = document.documentElement
-    const shouldBeDark = resolvedTheme === 'dark'
-    html.classList.toggle('dark', shouldBeDark)
-    html.classList.remove('light')
-  }, [resolvedTheme, isEditorReady, isCodeStreaming, activeSnippet?.code])
 
   useEffect(() => {
     let frameId = 0
@@ -184,8 +145,12 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
       container.id = 'strudel-repl-container'
       const root = getComputedStyle(document.documentElement)
       const get = (v: string) => root.getPropertyValue(v).trim() || 'inherit'
-      const bg = get('--background')
-      const fg = get('--foreground')
+      const isDark = resolvedTheme === 'dark'
+      const pageBg = get('--background')
+      const bg = isDark
+        ? `color-mix(in oklab, ${get('--input')} 30%, ${pageBg})`
+        : get('--popover')
+      const fg = isDark ? get('--foreground') : get('--popover-foreground')
       const muted = get('--muted')
       const border = get('--border')
       const accent = get('--accent')
@@ -198,12 +163,6 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
       const secondary = get('--secondary')
       const accentColor = get('--accent')
       const ringColor = get('--ring')
-      const themeEl = document.getElementById('strudel-theme-vars')
-      if (themeEl instanceof HTMLStyleElement && themeEl.textContent?.trim()) {
-        strudelThemeSourceRef.current = themeEl.textContent
-        themeEl.textContent = ''
-      }
-      const isDark = resolvedTheme === 'dark'
       const pastel = (color: string) => isDark
         ? `color-mix(in oklab, ${color} 40%, ${fg})`
         : `color-mix(in oklab, ${color} 70%, ${fg})`
@@ -441,7 +400,7 @@ ${tokenRules}
   }
 
   return (
-    <Card className="h-full flex flex-col overflow-hidden bg-background">
+    <Card className="h-full flex flex-col overflow-hidden border-border bg-popover shadow-md dark:bg-input/30 dark:shadow-xs">
       <CardContent className="flex-1 min-h-0 flex flex-col p-0">
         {!hasSnippet || isCleared ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

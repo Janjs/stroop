@@ -17,40 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Icons } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { useTheme } from 'next-themes'
-import '@strudel/repl'
-
-if (typeof window !== 'undefined') {
-  const neutralizeStrudelTheme = () => {
-    const el = document.getElementById('strudel-theme-vars')
-    if (el instanceof HTMLStyleElement && el.textContent?.trim()) el.textContent = ''
-  }
-  neutralizeStrudelTheme()
-  const obs = new MutationObserver((mutations) => {
-    for (const m of mutations) {
-      if (m.type === 'childList') {
-        for (const node of m.addedNodes) {
-          if (node instanceof HTMLStyleElement && node.id === 'strudel-theme-vars') {
-            node.textContent = ''
-            return
-          }
-        }
-      }
-      if (
-        m.type === 'characterData' &&
-        m.target.parentElement instanceof HTMLStyleElement &&
-        m.target.parentElement.id === 'strudel-theme-vars'
-      ) {
-        m.target.parentElement.textContent = ''
-        return
-      }
-    }
-  })
-  if (document.head) {
-    obs.observe(document.head, { childList: true, subtree: true, characterData: true })
-  }
-  queueMicrotask(neutralizeStrudelTheme)
-  requestAnimationFrame(neutralizeStrudelTheme)
-}
+import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
 
 type StrudelEditorElement = HTMLElement & {
   editor?: {
@@ -289,6 +256,11 @@ export default function ExamplesCarousel() {
   const { resolvedTheme } = useTheme()
 
   useEffect(() => setMounted(true), [])
+
+  useEffect(() => {
+    if (!mounted) return
+    void loadStrudelRepl()
+  }, [mounted])
 
   useEffect(() => {
     if (!api) return
