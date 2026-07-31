@@ -17,11 +17,7 @@ export default defineSchema({
     response: v.string(),
     headers: v.any(),
     timestamp: v.number(),
-  }).index("by_cacheKey", ["cacheKey"]),
-  toolCache: defineTable({
-    cacheKey: v.string(),
-    result: v.any(),
-    timestamp: v.number(),
+    isExample: v.optional(v.boolean()),
   }).index("by_cacheKey", ["cacheKey"]),
   chats: defineTable({
     sessionId: v.optional(v.string()),

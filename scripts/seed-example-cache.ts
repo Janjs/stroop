@@ -221,7 +221,7 @@ async function seed() {
     const response = buildFakeResponse(example.title, example.prompt, example.code)
 
     try {
-      await convex.mutation(api.cache.setPromptCache, {
+      await convex.mutation(api.cache.seedExamplePromptCache, {
         cacheKey,
         response,
         headers,

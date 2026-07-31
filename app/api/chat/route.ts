@@ -52,57 +52,6 @@ async function getCachedResponse(key: string): Promise<{ response: string; heade
   }
 }
 
-async function setCachedResponse(key: string, response: string, headers: Record<string, string>): Promise<void> {
-  try {
-    await convex.mutation(api.cache.setPromptCache, {
-      cacheKey: key,
-      response,
-      headers,
-    })
-  } catch (error) {
-    console.error('Error setting prompt cache:', error)
-  }
-}
-
-async function collectStreamForCache(stream: ReadableStream): Promise<string> {
-  const reader = stream.getReader()
-  const decoder = new TextDecoder()
-  const chunks: Uint8Array[] = []
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value) chunks.push(value)
-    }
-  } catch (error: any) {
-    if (error.name === 'AbortError' || error.message?.includes('terminated') || error.cause?.code === 'UND_ERR_SOCKET') {
-      console.log('Stream terminated early, caching partial response')
-    } else {
-      throw error
-    }
-  } finally {
-    try {
-      reader.releaseLock()
-    } catch (e) {
-      // Ignore errors releasing lock
-    }
-  }
-
-  if (chunks.length === 0) {
-    throw new Error('No data collected from stream')
-  }
-
-  const combined = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0))
-  let offset = 0
-  for (const chunk of chunks) {
-    combined.set(chunk, offset)
-    offset += chunk.length
-  }
-
-  return decoder.decode(combined)
-}
-
 export async function POST(req: Request) {
   try {
     const {
@@ -179,37 +128,7 @@ IMPORTANT: Never start your response with a code block. Always lead with convers
       sendReasoning: true,
     })
 
-    const stream = streamResponse.body
-    if (!stream) {
-      return streamResponse
-    }
-
-    const responseHeaders: Record<string, string> = {}
-    streamResponse.headers.forEach((value, key) => {
-      responseHeaders[key] = value
-    })
-
-    const [userStream, cacheStream] = stream.tee()
-
-    collectStreamForCache(cacheStream)
-      .then(async (collectedResponse) => {
-        if (collectedResponse && collectedResponse.length > 0) {
-          await setCachedResponse(cacheKey, collectedResponse, responseHeaders)
-          console.log('Cached prompt request:', { cacheKey, model, messageCount: messages.length })
-        }
-      })
-      .catch((error) => {
-        if (error.message !== 'No data collected from stream') {
-          console.error('Error caching response:', error.message || error)
-        }
-      })
-
-    return new Response(userStream, {
-      headers: {
-        ...streamResponse.headers,
-        'X-Cache': 'MISS',
-      },
-    })
+    return streamResponse
   } catch (error: any) {
     console.error('Chat API error:', error)
     return new Response(

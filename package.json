@@ -13,7 +13,7 @@
     "convex:codegen": "convex codegen",
     "clear-sessions": "convex run admin:clearAllAnonymousUsers",
     "reset-anonymous-users": "convex run admin:clearAllAnonymousUsers",
-    "clear-cache": "convex run cache:clearPromptCache && convex run cache:clearToolCache",
+    "clear-cache": "convex run cache:clearPromptCache",
     "seed-examples": "NEXT_PUBLIC_CONVEX_URL=$(grep NEXT_PUBLIC_CONVEX_URL .env.local | cut -d= -f2) npx tsx scripts/seed-example-cache.ts"
   },
   "dependencies": {
