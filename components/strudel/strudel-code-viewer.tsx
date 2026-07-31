@@ -254,8 +254,6 @@ ${tokenRules}
 
     if (isCodeStreaming) return
 
-    repl.editor?.stop?.()
-    setIsPlaying(false)
     setReplError(null)
     window.requestAnimationFrame(() => {
       const scroller = repl.shadowRoot?.querySelector('.cm-scroller')

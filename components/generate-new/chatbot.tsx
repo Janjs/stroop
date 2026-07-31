@@ -401,6 +401,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
           // 1. Create Chat -> get ID.
           currentChatIdRef.current = newChatId
+          onChatCreated?.(newChatId)
           // 2. Redirect - preserve prompt if it exists
           const redirectUrl = promptParam
             ? `/generate?chatId=${newChatId}&prompt=${encodeURIComponent(promptParam)}`

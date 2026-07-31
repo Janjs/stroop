@@ -27,14 +27,16 @@ const GenerateContent = () => {
   const chatId = searchParams.get('chatId') || undefined
 
   const prevChatIdRef = useRef<string | undefined>(undefined)
+  const createdChatIdRef = useRef<string | undefined>(undefined)
   const prevNewParamRef = useRef<string | null>(null)
   const hasInitializedRef = useRef(false)
   const newParam = searchParams.get('new')
-  const viewerKey = `${chatId ?? 'new'}-${newParam ?? 'none'}`
+  const viewerKey = newParam ?? 'none'
 
   useEffect(() => {
     if (hasInitializedRef.current) {
-      const isChatChange = prevChatIdRef.current !== chatId
+      const isCreatedChat = createdChatIdRef.current === chatId
+      const isChatChange = prevChatIdRef.current !== chatId && !isCreatedChat
       const isReset = newParam && newParam !== prevNewParamRef.current
       if (isChatChange || isReset) {
         setSnippets([])
@@ -46,6 +48,7 @@ const GenerateContent = () => {
 
     prevChatIdRef.current = chatId
     prevNewParamRef.current = newParam
+    createdChatIdRef.current = undefined
   }, [chatId, newParam])
 
   const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { isStreaming?: boolean }) => {
@@ -118,6 +121,7 @@ const GenerateContent = () => {
           chatId={chatId}
           onSnippetsGenerated={handleSnippetsGenerated}
           onToolError={handleToolError}
+          onChatCreated={(id) => { createdChatIdRef.current = id }}
           compileError={compileError}
           fixRequest={fixRequest}
           resetKey={searchParams.get('new')}
