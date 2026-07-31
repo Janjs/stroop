@@ -1,10 +1,11 @@
 import { ImageResponse } from 'next/og'
+import type { NextRequest } from 'next/server'
 
-export const alt = 'A shared Stroop creation'
-export const size = { width: 1200, height: 630 }
-export const contentType = 'image/png'
+export const runtime = 'edge'
 
-export default function OpenGraphImage() {
+export function GET(request: NextRequest) {
+  const title = request.nextUrl.searchParams.get('title') || 'Shared Stroop'
+
   return new ImageResponse(
     <div
       style={{
@@ -33,7 +34,7 @@ export default function OpenGraphImage() {
         }}
       >
         <div style={{ color: '#6b7280', display: 'flex', fontSize: 26 }}>♫ Shared Stroop creation</div>
-        <div style={{ display: 'flex', fontSize: 62, fontWeight: 700 }}>Listen to this Stroop</div>
+        <div style={{ display: 'flex', fontSize: 62, fontWeight: 700 }}>{title}</div>
         <div style={{ color: '#6b7280', display: 'flex', fontSize: 30 }}>
           A playable Strudel pattern made with Stroop.
         </div>
@@ -43,6 +44,6 @@ export default function OpenGraphImage() {
         </div>
       </div>
     </div>,
-    size,
+    { width: 1200, height: 630 },
   )
 }
