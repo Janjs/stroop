@@ -25,11 +25,11 @@ const Page = () => {
               <Icons.chordwiseMascot className="h-4 w-4 shrink-0" />
             </Badge>
           </Link>
-          <h1 className="text-3xl md:text-5xl font-bold flex flex-wrap items-start gap-x-2 gap-y-1 font-outfit">
+          <h1 className="flex flex-wrap items-start gap-x-2 gap-y-1 font-outfit text-3xl font-bold md:text-4xl xl:flex-nowrap">
             <span>Create playable</span>
-            <a href="https://strudel.cc/" target="_blank" rel="noopener noreferrer" className="group inline-flex items-center gap-0.5 underline underline-offset-4 decoration-foreground/30 hover:decoration-foreground transition-colors">
+            <a href="https://strudel.cc/" target="_blank" rel="noopener noreferrer" className="group relative underline underline-offset-4 decoration-foreground/30 transition-colors hover:decoration-foreground">
               Strudel
-              <Icons.arrowUpRight className="h-5 w-5 md:h-5 md:w-5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Icons.arrowUpRight className="absolute -right-2 -top-1 h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" />
             </a>
             <span>code</span>
           </h1>
