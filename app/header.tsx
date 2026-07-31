@@ -21,13 +21,14 @@ export default function Header() {
   const { isAuthenticated } = useConvexAuth()
   const pathname = usePathname()
   const isGeneratePage = pathname === '/generate'
+  const isSharePage = pathname === '/generate/share'
 
   const chat = useQuery(
     api.chats.get,
     chatId && isAuthenticated ? { id: chatId as Id<'chats'> } : 'skip'
   )
 
-  const displayPrompt = chat?.title || title || prompt || (isGeneratePage ? 'Welcome to Stroop' : null)
+  const displayPrompt = isSharePage ? null : chat?.title || title || prompt || (isGeneratePage ? 'Welcome to Stroop' : null)
 
   return (
     <header className="flex-shrink-0 relative">

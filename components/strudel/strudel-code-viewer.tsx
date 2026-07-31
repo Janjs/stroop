@@ -5,9 +5,20 @@ import { StrudelSnippet } from '@/types/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Check, Copy, MessageSquare, Minus, Pause, Play, Plus } from 'lucide-react'
+import { Check, Copy, MessageSquare, Minus, Pause, Play, Plus, Share2 } from 'lucide-react'
 import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
 import { useTheme } from 'next-themes'
+import { useMutation } from 'convex/react'
+import { api } from '@/convex/_generated/api'
+import { Id } from '@/convex/_generated/dataModel'
+import { useAnonymousSession } from '@/hooks/useAnonymousSession'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface StrudelCodeViewerProps {
   snippets: StrudelSnippet[]
@@ -16,6 +27,8 @@ interface StrudelCodeViewerProps {
   onCompileError?: (message: string, code: string) => void
   onFixInChat?: (message: string, code: string) => void
   resetKey?: string | null
+  chatId?: string
+  shareTitle?: string
 }
 
 type StrudelEditorElement = HTMLElement & {
@@ -96,15 +109,20 @@ const getErrorRange = (error: unknown, code: string) => {
   return null
 }
 
-const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = false, onCompileError, onFixInChat, resetKey }: StrudelCodeViewerProps) => {
+const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = false, onCompileError, onFixInChat, resetKey, chatId, shareTitle }: StrudelCodeViewerProps) => {
   const activeSnippet = snippets[0]
   const hasSnippet = Boolean(activeSnippet?.code?.trim())
   const [isCleared, setIsCleared] = useState(false)
   const lastResetKeyRef = useRef<string | null | undefined>(undefined)
   const replRef = useRef<StrudelEditorElement | null>(null)
+  const sharePreviewRef = useRef<StrudelEditorElement | null>(null)
   const [isEditorReady, setIsEditorReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [isSharePlaying, setIsSharePlaying] = useState(false)
+  const [isSharePreviewReady, setIsSharePreviewReady] = useState(false)
   const [hasCopied, setHasCopied] = useState(false)
+  const [isShareOpen, setIsShareOpen] = useState(false)
+  const [hasShared, setHasShared] = useState(false)
   const [replError, setReplError] = useState<{ message: string; range?: { from: number; to: number } } | null>(null)
   const copyTimeoutRef = useRef<number | null>(null)
   const { resolvedTheme } = useTheme()
@@ -116,10 +134,33 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   const activeCodeRef = useRef(activeSnippet?.code)
   activeCodeRef.current = activeSnippet?.code
   const lastSetNormalizedCodeRef = useRef<string>('')
+  const currentEditorCodeRef = useRef(activeSnippet?.code || '')
+  const makeShareable = useMutation(api.chats.makeShareable)
+  const anonymousSessionId = useAnonymousSession()
 
   useEffect(() => {
     void loadStrudelRepl()
   }, [])
+
+  useEffect(() => {
+    if (!isShareOpen || !activeSnippet?.code) return
+    let frame = 0
+    const setPreviewCode = () => {
+      if (sharePreviewRef.current?.editor?.setCode) {
+        sharePreviewRef.current.editor.setCode(currentEditorCodeRef.current || activeSnippet.code)
+        setIsSharePreviewReady(true)
+        return
+      }
+      frame = window.requestAnimationFrame(setPreviewCode)
+    }
+    frame = window.requestAnimationFrame(setPreviewCode)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      sharePreviewRef.current?.editor?.stop?.()
+      setIsSharePlaying(false)
+      setIsSharePreviewReady(false)
+    }
+  }, [isShareOpen, activeSnippet?.code])
 
   useEffect(() => {
     const repl = replRef.current
@@ -199,6 +240,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
       tokenClasses.forEach((cls) => {
         const color = palette[idx % palette.length]
         tokenRules += `#strudel-repl-container .cm-editor .${cls}{color:${color} !important;}`
+        tokenRules += `.strudel-share-preview .cm-editor .${cls}{color:${color} !important;}`
         idx += 1
       })
       const id = 'strudel-app-theme'
@@ -221,6 +263,14 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
 #strudel-repl-container .cm-editor.cm-focused{outline-color:${ring};}
 #strudel-repl-container .cm-cursor{border-left-color:${fg};}
 #strudel-repl-container .cm-editor .cm-flash{background-color:color-mix(in oklab, ${primary} 20%, transparent) !important;outline:1px solid color-mix(in oklab, ${primary} 55%, transparent);border-radius:2px;}
+.strudel-share-preview .cm-editor,.strudel-share-preview .cm-scroller,.strudel-share-preview .cm-content,.strudel-share-preview .cm-line{font-family:${fontMono};font-weight:500;font-size:11px;}
+.strudel-share-preview .cm-editor{background-color:transparent !important;color:${fg} !important;height:100%;}
+.strudel-share-preview .cm-scroller{background-color:transparent !important;overflow:auto !important;}
+.strudel-share-preview .cm-content{color:${fg} !important;padding:12px;}
+.strudel-share-preview .cm-gutters{display:none !important;}
+.strudel-share-preview .cm-activeLine{background:transparent !important;}
+.strudel-share-preview .cm-editor.cm-focused{outline:none;}
+.strudel-share-preview .cm-cursor{border-left-color:${fg};}
 ${tokenRules}
 `
       document.head.appendChild(styleEl)
@@ -259,6 +309,7 @@ ${tokenRules}
     }
     const normalizedCode = normalizeStrudelCode(activeSnippet.code)
     lastSetNormalizedCodeRef.current = normalizedCode
+    currentEditorCodeRef.current = normalizedCode
     if (repl.editor?.setCode) {
       repl.editor.setCode(normalizedCode)
     } else {
@@ -348,6 +399,7 @@ ${tokenRules}
         return
       }
       const code = detail?.code ?? ''
+      if (code) currentEditorCodeRef.current = code
       if (lastSetNormalizedCodeRef.current && code && code !== lastSetNormalizedCodeRef.current) {
         return
       }
@@ -405,6 +457,64 @@ ${tokenRules}
     }
   }
 
+  const handleToggleSharePlayback = async () => {
+    const editor = sharePreviewRef.current?.editor
+    if (!editor) return
+    if (isSharePlaying) {
+      editor.stop?.()
+      setIsSharePlaying(false)
+      return
+    }
+    try {
+      const result = editor.evaluate?.()
+      if (result && typeof (result as Promise<unknown>).then === 'function') await result
+      editor.start?.()
+      setIsSharePlaying(true)
+    } catch (error) {
+      console.error('Failed to play shared Strudel preview:', error)
+    }
+  }
+
+  const getCurrentEditorCode = () => {
+    const lines = document.querySelectorAll('#strudel-repl-container .cm-line')
+    return lines.length
+      ? Array.from(lines, (line) => line.textContent || '').join('\n')
+      : currentEditorCodeRef.current || activeSnippet?.code || ''
+  }
+
+  const openSharePreview = () => {
+    currentEditorCodeRef.current = getCurrentEditorCode()
+    setIsShareOpen(true)
+  }
+
+  const handleShare = async () => {
+    if (!activeSnippet?.code || !chatId) return
+    try {
+      const currentCode = getCurrentEditorCode()
+      currentEditorCodeRef.current = currentCode
+      await makeShareable({
+        id: chatId as Id<'chats'>,
+        code: currentCode,
+        sessionId: anonymousSessionId ?? undefined,
+      })
+      const shareUrl = new URL('/generate/share', window.location.origin)
+      shareUrl.searchParams.set('chatId', chatId)
+      shareUrl.searchParams.set('title', shareTitle || activeSnippet.title || 'Shared Stroop')
+      const shareData = { title: shareTitle || activeSnippet.title || 'Stroop output', url: shareUrl.toString() }
+      if (navigator.share) {
+        await navigator.share(shareData)
+      } else {
+        await navigator.clipboard.writeText(shareUrl.toString())
+        setHasShared(true)
+        window.setTimeout(() => setHasShared(false), 1500)
+      }
+    } catch (error) {
+      if ((error as DOMException).name !== 'AbortError') {
+        console.error('Failed to share Strudel output:', error)
+      }
+    }
+  }
+
   return (
     <Card className="h-full flex flex-col overflow-hidden border-border bg-white shadow-md dark:bg-input/30 dark:shadow-xs">
       <CardContent className="flex-1 min-h-0 flex flex-col bg-white p-0 dark:bg-transparent">
@@ -435,23 +545,26 @@ ${tokenRules}
                   </Alert>
                 </div>
               ) : null}
-              <div className="absolute bottom-3 right-3 z-10 flex flex-col items-end gap-2">
-                <div className="flex items-center gap-1 rounded-md bg-background border">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setFontSize((s) => Math.max(10, s - 1))} aria-label="Decrease font size">
+              <div className="absolute inset-x-3 bottom-3 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-full bg-background" onClick={handleCopy} aria-label="Copy code" disabled={!activeSnippet?.code}>
+                    {hasCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-full bg-background" onClick={openSharePreview} aria-label="Share output" disabled={!activeSnippet?.code}>
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <Button className="h-11 min-w-28 rounded-full bg-primary px-5 shadow-sm" onClick={handleTogglePlayback} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isEditorReady || Boolean(replError)}>
+                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  {isPlaying ? 'Pause' : 'Play'}
+                </Button>
+                <div className="ml-auto flex items-center gap-1 rounded-full border bg-background p-0.5">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setFontSize((s) => Math.max(10, s - 1))} aria-label="Decrease font size">
                     <Minus className="h-3 w-3" />
                   </Button>
                   <span className="text-xs tabular-nums w-6 text-center select-none">{fontSize}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setFontSize((s) => Math.min(24, s + 1))} aria-label="Increase font size">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setFontSize((s) => Math.min(24, s + 1))} aria-label="Increase font size">
                     <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" className="h-9 w-9 bg-background" onClick={handleCopy} aria-label="Copy code" disabled={!activeSnippet?.code}>
-                    {hasCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                  <Button className="bg-primary" onClick={handleTogglePlayback} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isEditorReady || Boolean(replError)}>
-                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                    {isPlaying ? 'Pause' : 'Play'}
                   </Button>
                 </div>
               </div>
@@ -459,6 +572,53 @@ ${tokenRules}
           </>
         )}
       </CardContent>
+      <Dialog open={isShareOpen} onOpenChange={setIsShareOpen}>
+        <DialogContent className="max-w-lg rounded-3xl p-6">
+          <DialogHeader>
+            <DialogTitle className="font-outfit">Share your Stroop</DialogTitle>
+            <DialogDescription>Send this playable output to someone else.</DialogDescription>
+          </DialogHeader>
+          <div className="overflow-hidden rounded-lg border border-l-2 border-l-primary/40 bg-card px-5 pb-4 pt-4">
+            <div className="mb-2 flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-2">
+                <p className="line-clamp-1 font-outfit text-base font-semibold">{activeSnippet?.title || shareTitle || 'Shared Stroop'}</p>
+                <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                  {activeSnippet?.title && shareTitle ? shareTitle : 'A generated Strudel pattern made with Stroop.'}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                className={`h-9 w-9 shrink-0 rounded-full ${isSharePlaying ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
+                onClick={handleToggleSharePlayback}
+                disabled={!isSharePreviewReady}
+                aria-label={isSharePlaying ? 'Pause preview' : 'Play preview'}
+              >
+                {isSharePlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="ml-0.5 h-3.5 w-3.5" />}
+              </Button>
+            </div>
+            <div className="strudel-share-preview mt-3 overflow-hidden rounded-md bg-muted/60">
+              <div className="flex items-center gap-1.5 border-b border-border/40 px-3 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-red-400/60" />
+                <span className="h-2 w-2 rounded-full bg-yellow-400/60" />
+                <span className="h-2 w-2 rounded-full bg-green-400/60" />
+                <span className="ml-2 font-mono text-[10px] text-muted-foreground/60">strudel</span>
+              </div>
+              <div className="h-40 overflow-auto">
+                {isShareOpen && createElement('strudel-editor', { ref: sharePreviewRef, className: 'h-0 w-full overflow-hidden' })}
+              </div>
+            </div>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Making this chat shareable will share the generated Strudel code. Your conversation stays private.
+          </p>
+          <Button className="w-full rounded-full" onClick={handleShare} disabled={!chatId}>
+            {hasShared ? <Check /> : <Share2 />}
+            {hasShared ? 'Link copied' : 'Share output'}
+          </Button>
+          {!chatId && <p className="text-center text-xs text-muted-foreground">Save this chat before sharing it.</p>}
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

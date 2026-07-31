@@ -96,6 +96,8 @@ const GenerateContent = () => {
       onCompileError={handleCompileError}
       onFixInChat={handleFixInChat}
       resetKey={searchParams.get('new')}
+      chatId={chatId}
+      shareTitle={searchParams.get('title') || prompt}
     />
   ) : (
     <Card className="h-full flex flex-col overflow-hidden">

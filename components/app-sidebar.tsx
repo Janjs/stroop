@@ -87,7 +87,7 @@ export function AppSidebar() {
 
   const currentChatId = searchParams.get('chatId')
 
-  if (!isAuthenticated && pathname === '/') {
+  if (!isAuthenticated) {
     return null
   }
 

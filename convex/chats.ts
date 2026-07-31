@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
 import { paginationOptsValidator } from "convex/server";
+import { Id } from "./_generated/dataModel";
 
 export const list = query({
   args: {
@@ -47,6 +48,41 @@ export const get = query({
     }
 
     return null;
+  },
+});
+
+export const getShared = query({
+  args: { id: v.id("chats") },
+  handler: async (ctx, args) => {
+    const chat = await ctx.db.get(args.id);
+    if (!chat?.sharedAt) return null;
+    const user = chat.userId ? await ctx.db.get(chat.userId as Id<"users">) : null;
+    return {
+      title: chat.title,
+      snippets: chat.sharedCode ? [{ code: chat.sharedCode }] : chat.snippets,
+      sharedBy: chat.sharedBy ?? user?.name,
+    };
+  },
+});
+
+export const makeShareable = mutation({
+  args: { id: v.id("chats"), code: v.string(), sessionId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    const chat = await ctx.db.get(args.id);
+    if (!chat) throw new Error("Chat not found");
+
+    const isOwner = (userId && chat.userId === userId) || (args.sessionId && chat.sessionId === args.sessionId);
+    if (!isOwner) throw new Error("Unauthorized");
+
+    const identity = await ctx.auth.getUserIdentity();
+    const user = userId ? await ctx.db.get(userId as Id<"users">) : null;
+    await ctx.db.patch(args.id, {
+      sharedAt: Date.now(),
+      sharedBy: identity?.name ?? user?.name ?? undefined,
+      sharedCode: args.code,
+    });
+    return args.id;
   },
 });
 
