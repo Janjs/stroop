@@ -122,6 +122,19 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   }, [])
 
   useEffect(() => {
+    const repl = replRef.current
+    const stopPlayback = () => {
+      repl?.editor?.stop?.()
+      setIsPlaying(false)
+    }
+    window.addEventListener('blur', stopPlayback)
+    return () => {
+      window.removeEventListener('blur', stopPlayback)
+      stopPlayback()
+    }
+  }, [])
+
+  useEffect(() => {
     let frameId = 0
     const checkReady = () => {
       if (replRef.current?.editor) {

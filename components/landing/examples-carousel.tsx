@@ -253,9 +253,23 @@ export default function ExamplesCarousel() {
   const [isEditorReady, setIsEditorReady] = useState(false)
   const [mounted, setMounted] = useState(false)
   const editorRefs = useRef<(StrudelEditorElement | null)[]>([])
+  const playingEditorRef = useRef<StrudelEditorElement | null>(null)
   const { resolvedTheme } = useTheme()
 
   useEffect(() => setMounted(true), [])
+
+  useEffect(() => {
+    const stopPlayback = () => {
+      playingEditorRef.current?.editor?.stop?.()
+      playingEditorRef.current = null
+      setPlayingIndex(null)
+    }
+    window.addEventListener('blur', stopPlayback)
+    return () => {
+      window.removeEventListener('blur', stopPlayback)
+      stopPlayback()
+    }
+  }, [])
 
   useEffect(() => {
     if (!mounted) return
@@ -370,6 +384,7 @@ ${tokenRules}
     if (playingIndex !== null) {
       const prev = editorRefs.current[playingIndex]
       prev?.editor?.stop?.()
+      playingEditorRef.current = null
       if (prev?.editor?.setCode) prev.editor.setCode(EXAMPLES[playingIndex].fullCode)
     }
 
@@ -387,6 +402,7 @@ ${tokenRules}
         await result
       }
       repl.editor.start?.()
+      playingEditorRef.current = repl
       setPlayingIndex(index)
     } catch (error) {
       console.error('Failed to start Strudel playback:', error)
