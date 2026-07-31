@@ -19,16 +19,15 @@ export default function Header() {
   const chatId = searchParams.get('chatId')
   const title = searchParams.get('title')
   const { isAuthenticated } = useConvexAuth()
+  const pathname = usePathname()
+  const isGeneratePage = pathname === '/generate'
 
   const chat = useQuery(
     api.chats.get,
     chatId && isAuthenticated ? { id: chatId as Id<'chats'> } : 'skip'
   )
 
-  const displayPrompt = chat?.title || title || prompt
-
-  const pathname = usePathname()
-  const isGeneratePage = pathname === '/generate'
+  const displayPrompt = chat?.title || title || prompt || (isGeneratePage ? 'Welcome to Stroop' : null)
 
   return (
     <header className="flex-shrink-0 relative">

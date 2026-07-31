@@ -149,7 +149,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
       const pageBg = get('--background')
       const bg = isDark
         ? `color-mix(in oklab, ${get('--input')} 30%, ${pageBg})`
-        : get('--popover')
+        : '#fff'
       const fg = isDark ? get('--foreground') : get('--popover-foreground')
       const muted = get('--muted')
       const border = get('--border')
@@ -166,14 +166,9 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
       const pastel = (color: string) => isDark
         ? `color-mix(in oklab, ${color} 40%, ${fg})`
         : `color-mix(in oklab, ${color} 70%, ${fg})`
-      const palette = [
-        pastel(primary),
-        pastel(accentColor),
-        pastel(secondary),
-        pastel(mutedFg),
-        pastel(ringColor),
-        pastel(fg),
-      ]
+      const palette = isDark
+        ? [pastel(primary), pastel(accentColor), pastel(secondary), pastel(mutedFg), pastel(ringColor), pastel(fg)]
+        : [fg, primary, mutedFg, `color-mix(in oklab, ${primary} 55%, ${fg})`]
       const tokenClasses = new Set<string>()
       for (const sheet of document.styleSheets) {
         try {
@@ -200,19 +195,19 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
         styleEl.id = id
       }
       styleEl.textContent = `
-#strudel-repl-container{height:100%;}
+#strudel-repl-container{height:100%;background:${bg} !important;}
 #strudel-repl-container .cm-editor,#strudel-repl-container .cm-scroller,#strudel-repl-container .cm-content,#strudel-repl-container .cm-line{font-family:${fontMono};font-weight:500;font-size:${fontSize}px;}
 #strudel-repl-container .cm-editor{background-color:${bg} !important;color:${fg} !important;border-radius:${radius};height:100%;}
 #strudel-repl-container .cm-scroller{background-color:${bg} !important;}
 #strudel-repl-container .cm-content{color:${fg} !important;}
-#strudel-repl-container .cm-gutters{background-color:${muted} !important;border-color:${border};min-height:100%;}
+#strudel-repl-container .cm-gutters{background-color:${isDark ? muted : bg} !important;border-color:${border};min-height:100%;}
 #strudel-repl-container .cm-gutterElement{min-width:3ch;text-align:right;}
-#strudel-repl-container .cm-activeLineGutter{background-color:${accent} !important;color:${accentFg} !important;}
-#strudel-repl-container .cm-activeLine{background-color:${muted} !important;}
+#strudel-repl-container .cm-activeLineGutter{background-color:${accent} !important;color:${isDark ? accentFg : fg} !important;}
+#strudel-repl-container .cm-activeLine{background-color:${isDark ? muted : bg} !important;}
 #strudel-repl-container .cm-selectionMatch,#strudel-repl-container .cm-selectionBackground{background-color:${accent} !important;}
 #strudel-repl-container .cm-editor.cm-focused{outline-color:${ring};}
 #strudel-repl-container .cm-cursor{border-left-color:${fg};}
-#strudel-repl-container .cm-editor .cm-flash{background-color:hsl(0 84% 60% / 0.25) !important;outline:1px solid hsl(0 84% 60% / 0.5);border-radius:2px;}
+#strudel-repl-container .cm-editor .cm-flash{background-color:color-mix(in oklab, ${primary} 20%, transparent) !important;outline:1px solid color-mix(in oklab, ${primary} 55%, transparent);border-radius:2px;}
 ${tokenRules}
 `
       document.head.appendChild(styleEl)
@@ -400,8 +395,8 @@ ${tokenRules}
   }
 
   return (
-    <Card className="h-full flex flex-col overflow-hidden border-border bg-popover shadow-md dark:bg-input/30 dark:shadow-xs">
-      <CardContent className="flex-1 min-h-0 flex flex-col p-0">
+    <Card className="h-full flex flex-col overflow-hidden border-border bg-white shadow-md dark:bg-input/30 dark:shadow-xs">
+      <CardContent className="flex-1 min-h-0 flex flex-col bg-white p-0 dark:bg-transparent">
         {!hasSnippet || isCleared ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             {isLoading ? 'Waiting for code...' : 'Your Strudel code will appear here.'}

@@ -3,6 +3,7 @@ import { openai as openaiProvider } from '@ai-sdk/openai'
 import { createHash } from 'crypto'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '@/convex/_generated/api'
+import { DEFAULT_OPENAI_MODEL } from '@/lib/models'
 import { readFile } from 'fs/promises'
 import path from 'path'
 
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
   try {
     const {
       messages,
-      model = 'gpt-5.2',
+      model = DEFAULT_OPENAI_MODEL,
       currentCode,
     }: {
       messages: UIMessage[]

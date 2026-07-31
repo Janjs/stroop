@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '../convex/_generated/api'
+import { DEFAULT_OPENAI_MODEL } from '../lib/models'
 
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL!
 if (!CONVEX_URL) {
@@ -216,7 +217,7 @@ async function seed() {
   }
 
   for (const example of EXAMPLES) {
-    const cacheKey = generateNormalizedCacheKey(example.prompt, 'gpt-5.2')
+    const cacheKey = generateNormalizedCacheKey(example.prompt, DEFAULT_OPENAI_MODEL)
     const response = buildFakeResponse(example.title, example.prompt, example.code)
 
     try {

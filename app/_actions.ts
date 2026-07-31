@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation'
 import { GITHUB_LINK } from '@/lib/utils'
 import { revalidatePath } from 'next/cache'
 import { parseStrudelSnippets, StrudelSnippetsSchema } from '@/lib/strudel-generation'
+import { DEFAULT_OPENAI_MODEL } from '@/lib/models'
 
 const MOCK = false
 
@@ -17,7 +18,7 @@ export const generateStrudelSnippets = async (
 
   try {
     const { object } = await generateObject({
-      model: openai('gpt-5.2'),
+      model: openai(DEFAULT_OPENAI_MODEL),
       schema: StrudelSnippetsSchema,
       prompt: `Generate 1 Strudel code snippet based on the user's request. The snippet should be valid Strudel code and playable as-is.\n\nUser request: ${userInput.prompt}`,
     })

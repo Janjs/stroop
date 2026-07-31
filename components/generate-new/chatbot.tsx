@@ -9,6 +9,7 @@ import { useAuthActions } from '@convex-dev/auth/react'
 import { useAnonymousSession } from '@/hooks/useAnonymousSession'
 import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 import { Id } from '@/convex/_generated/dataModel'
+import { DEFAULT_OPENAI_MODEL } from '@/lib/models'
 import useGenerateSearchParams from '@/hooks/useGenerateSearchParams'
 import {
   Conversation,
@@ -288,7 +289,6 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const lastCompileErrorCodeRef = useRef<string | null>(null)
   const lastSnippetScopeKeyRef = useRef<string | null>(null)
 
-  const [isTyping, setIsTyping] = useState(false)
   const lastStreamedCodeRef = useRef<string | null>(null)
   const codeUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -322,7 +322,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const { textInput } = usePromptInputController()
   const [, setPrompt] = useGenerateSearchParams()
 
-  const { messages, sendMessage: rawSendMessage, status, setMessages } = useChat({
+  const { messages, sendMessage: rawSendMessage, status, setMessages, stop } = useChat({
     api: '/api/chat',
     onFinish: async (message: any) => {
       const code = extractCodeFromMessage(message)
@@ -419,6 +419,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
   const sendMessageRef = useRef(rawSendMessage)
   sendMessageRef.current = rawSendMessage
+  const stopRef = useRef(stop)
+  stopRef.current = stop
   const sendMessage = useCallback((...args: Parameters<typeof rawSendMessage>) => {
     return sendMessageRef.current(...args)
   }, [])
@@ -481,6 +483,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   useEffect(() => {
     const normalizedChatId = chatId || null
     if (normalizedChatId !== currentChatIdRef.current) {
+      stopRef.current()
       setMessages([])
       currentChatIdRef.current = normalizedChatId
     }
@@ -529,20 +532,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       setIsSuggestionsOpen(false)
       sendMessage(
         { text: externalPrompt },
-        { body: { model: 'gpt-5.2' } }
+        { body: { model: DEFAULT_OPENAI_MODEL } }
       )
     }
   }, [externalPrompt, status, sendMessage, messages.length, chatId])
-
-  useEffect(() => {
-    if (status === 'streaming') {
-      setIsTyping(true)
-      const timer = setTimeout(() => setIsTyping(false), 200)
-      return () => clearTimeout(timer)
-    } else {
-      setIsTyping(false)
-    }
-  }, [messages, status])
 
   useEffect(() => {
     const MAX_RETRIES_PER_CODE = 2
@@ -584,7 +577,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     const currentCode = currentSnippets?.map(s => s.code).filter(Boolean).join('\n\n') || undefined
     sendMessage(
       { text: retryPrompt },
-      { body: { model: 'gpt-5.2', currentCode } }
+      { body: { model: DEFAULT_OPENAI_MODEL, currentCode } }
     )
   }, [compileError, status, externalPrompt, sendMessage])
 
@@ -608,13 +601,14 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     const currentCode = currentSnippets?.map(s => s.code).filter(Boolean).join('\n\n') || undefined
     sendMessage(
       { text: fixPrompt },
-      { body: { model: 'gpt-5.2', currentCode } }
+      { body: { model: DEFAULT_OPENAI_MODEL, currentCode } }
     )
   }, [fixRequest, status, sendMessage])
 
   const lastResetKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (resetKey && resetKey !== lastResetKeyRef.current) {
+      stopRef.current()
       lastResetKeyRef.current = resetKey
       setMessages([])
       setError(null)
@@ -785,7 +779,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       { text: textToSend },
       {
         body: {
-          model: 'gpt-5.2',
+          model: DEFAULT_OPENAI_MODEL,
           currentCode,
         },
       }
@@ -832,7 +826,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           <ConversationContent className="pt-8 gap-4">
             {(() => {
               const messagesToRender = [...messages]
-              if (status === 'submitted' && messagesToRender.length > 0 && messagesToRender[messagesToRender.length - 1].role !== 'assistant') {
+              if ((status === 'submitted' || status === 'streaming') && messagesToRender.length > 0 && messagesToRender[messagesToRender.length - 1].role !== 'assistant') {
                 messagesToRender.push({
                   id: 'generating-placeholder',
                   role: 'assistant',
@@ -856,6 +850,12 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                         ? splitAroundStrudelCode(fullText)
                         : { before: fullText, after: '', hasCode: false }
                       const isCodeStreamingNow = hasCode && isLastMessage && status === 'streaming'
+                      const hasVisibleToolPart = message.parts?.some((part) =>
+                        (part.type === 'tool-call' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
+                        'state' in part &&
+                        'input' in part
+                      )
+                      const showWaitingIndicator = showTypingIndicator && !fullText.trim() && !hasVisibleToolPart
 
                       if (message.role === 'assistant' && hasCode) {
                         return (
@@ -891,17 +891,22 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                                 </MessageContent>
                               </Message>
                             )}
-                            {showTypingIndicator && (
-                              <div className="text-left pl-2">
-                                <Icons.chatbotLogo className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
-                              </div>
-                            )}
                           </>
                         )
                       }
 
                       return (
                         <>
+                          {showWaitingIndicator && (
+                            <Message from="assistant">
+                              <MessageContent>
+                                <div className="flex items-center gap-2 text-sm leading-none text-muted-foreground" role="status" aria-live="polite">
+                                  <Icons.chatbotLogo className="size-4 shrink-0 animate-pulse text-primary" />
+                                  <span>Stroop is thinking…</span>
+                                </div>
+                              </MessageContent>
+                            </Message>
+                          )}
                           {message.parts ? (
                             message.parts.map((part, i) => {
                               if (part.type === 'text' && 'text' in part) {
@@ -910,11 +915,6 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                                   <Message key={`${message.id}-${i}`} from={message.role}>
                                     <MessageContent>
                                       <MessageResponse>{part.text}</MessageResponse>
-                                      {showTypingIndicator && i === (message.parts?.length ?? 0) - 1 && (
-                                        <div className="text-left">
-                                          <Icons.chatbotLogo className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
-                                        </div>
-                                      )}
                                     </MessageContent>
                                   </Message>
                                 )
@@ -949,11 +949,6 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                             <Message from={message.role}>
                               <MessageContent>
                                 <MessageResponse>{before}</MessageResponse>
-                                {showTypingIndicator && (
-                                  <div className="text-left">
-                                    <Icons.chatbotLogo className={`size-4 inline-block ${isTyping ? 'animate-pulse' : ''}`} />
-                                  </div>
-                                )}
                               </MessageContent>
                             </Message>
                           )}
