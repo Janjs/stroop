@@ -10,6 +10,7 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { themeInitScript } from '@/lib/theme-script'
 
 export const metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://stroop.janjs.dev'),
   title: 'stroop',
   description: 'Strudel Code Generator',
   content: 'width=device-width, initial-scale=1',
