@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+function fixCookieForMobileSafari(cookie: string): string {
+  return cookie
+    .replace(/;\s*partitioned/gi, '')
+    .replace(/;\s*SameSite=None/gi, '; SameSite=Lax')
+    .replace(/;\s*Domain=[^;]*/gi, '')
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ provider: string }> }
@@ -26,13 +33,12 @@ export async function GET(
       const redirectResponse = NextResponse.redirect(location)
       const setCookies = response.headers.getSetCookie?.() ?? []
       for (const cookie of setCookies) {
-        redirectResponse.headers.append('Set-Cookie', cookie)
+        redirectResponse.headers.append('Set-Cookie', fixCookieForMobileSafari(cookie))
       }
       return redirectResponse
     }
   }
 
-  // Pass through the response
   const body = await response.text()
   return new NextResponse(body, {
     status: response.status,
