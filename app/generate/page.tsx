@@ -22,6 +22,7 @@ const GenerateContent = () => {
   const searchParams = useSearchParams()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const userDismissedDrawerRef = useRef(false)
 
   const prompt = searchParams.get('prompt') || undefined
   const chatId = searchParams.get('chatId') || undefined
@@ -41,6 +42,8 @@ const GenerateContent = () => {
       if (isChatChange || isReset) {
         setSnippets([])
         setError(null)
+        setCompileError(null)
+        setFixRequest(null)
       }
     } else {
       hasInitializedRef.current = true
@@ -51,14 +54,23 @@ const GenerateContent = () => {
     createdChatIdRef.current = undefined
   }, [chatId, newParam])
 
-  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { isStreaming?: boolean }) => {
+  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { isStreaming?: boolean; fromChatLoad?: boolean }) => {
+    const isStreaming = options?.isStreaming ?? false
+    const fromChatLoad = options?.fromChatLoad ?? false
     setSnippets(newSnippets.slice(-1))
-    setIsCodeStreaming(options?.isStreaming ?? false)
+    setIsCodeStreaming(isStreaming)
     setError(null)
-    setCompileError(null)
-    setFixRequest(null)
-    if (isMobile && newSnippets.some((snippet) => Boolean(snippet.code?.trim()))) {
-      setIsDrawerOpen(true)
+    
+    if (!isStreaming) {
+      userDismissedDrawerRef.current = false
+      setCompileError(null)
+      setFixRequest(null)
+    }
+    
+    if (isMobile && !fromChatLoad && newSnippets.some((snippet) => Boolean(snippet.code?.trim()))) {
+      if (!userDismissedDrawerRef.current) {
+        setIsDrawerOpen(true)
+      }
     }
   }, [isMobile])
 
@@ -132,12 +144,22 @@ const GenerateContent = () => {
         />
       </div>
 
-      <div className="hidden md:block flex-1 min-w-0 min-h-0 overflow-hidden">
-        {codeViewer}
-      </div>
+      {!isMobile && (
+        <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+          {codeViewer}
+        </div>
+      )}
 
       {isMobile && (
-        <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+        <Drawer 
+          open={isDrawerOpen} 
+          onOpenChange={(open) => {
+            if (!open) {
+              userDismissedDrawerRef.current = true
+            }
+            setIsDrawerOpen(open)
+          }}
+        >
           <DrawerContent className="h-[85vh] p-4">
             <div className="h-full overflow-hidden">
               {codeViewer}
