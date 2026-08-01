@@ -291,6 +291,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
   const lastStreamedCodeRef = useRef<string | null>(null)
   const codeUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isLoadingChatRef = useRef(false)
 
   const onSnippetsGeneratedRef = useRef(onSnippetsGenerated)
   onSnippetsGeneratedRef.current = onSnippetsGenerated
@@ -431,6 +432,11 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
   useEffect(() => {
     if (status === 'streaming') return
+    
+    if (isLoadingChatRef.current) {
+      isLoadingChatRef.current = false
+      return
+    }
 
     const snippetScopeKey = `${chatId || 'new'}:${resetKey || 'none'}`
     if (lastSnippetScopeKeyRef.current !== snippetScopeKey) {
@@ -498,6 +504,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           if (messages.length > existingChat.messages.length) {
             return
           }
+          isLoadingChatRef.current = true
           setMessages(existingChat.messages as any)
           if (existingChat.snippets && existingChat.snippets.length > 0) {
             onSnippetsGeneratedRef.current?.(existingChat.snippets, { fromChatLoad: true })

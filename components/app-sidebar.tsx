@@ -73,7 +73,7 @@ export function AppSidebar() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const { state, toggleSidebar, isMobile } = useSidebar()
+  const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar()
   const isCollapsed = state === 'collapsed'
   const { isAuthenticated } = useConvexAuth()
   const { signIn } = useAuthActions()
@@ -201,7 +201,10 @@ export function AppSidebar() {
                                         isMobile && "group-has-[[data-sidebar=menu-action]]/menu-item:pr-8"
                                       )}
                                     >
-                                      <Link href={`/generate?chatId=${chat._id}&title=${encodeURIComponent(chat.title)}`}>
+                                      <Link 
+                                        href={`/generate?chatId=${chat._id}&title=${encodeURIComponent(chat.title)}`}
+                                        onClick={() => isMobile && setOpenMobile(false)}
+                                      >
                                         <span>{chat.title}</span>
                                       </Link>
                                     </SidebarMenuButton>
