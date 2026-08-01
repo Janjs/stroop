@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 function fixCookieForMobileSafari(cookie: string): string {
-  return cookie
+  let fixed = cookie
     .replace(/;\s*partitioned/gi, '')
     .replace(/;\s*SameSite=None/gi, '; SameSite=Lax')
-    .replace(/;\s*Domain=[^;]*/gi, '')
+  
+  if (!/;\s*SameSite=/i.test(fixed)) {
+    fixed = fixed.replace(/;/, '; SameSite=Lax;')
+  }
+  
+  return fixed
 }
 
 export async function GET(
