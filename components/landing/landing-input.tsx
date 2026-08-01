@@ -78,6 +78,7 @@ function LandingInputContent() {
   const [selectedMood, setSelectedMood] = useState<string | null>(null)
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleMoodClick = (mood: string) =>
     setSelectedMood((prev) => (prev === mood ? null : mood))
@@ -94,6 +95,7 @@ function LandingInputContent() {
   const handleSubmit = (message: PromptInputMessage) => {
     const text = message.text?.trim() || constructPrompt(selectedMood, selectedGenre, selectedTempo)
     if (!text) return
+    setIsSubmitting(true)
     router.push(`/generate?prompt=${encodeURIComponent(text)}`)
   }
 
@@ -107,7 +109,7 @@ function LandingInputContent() {
           <PromptInputTextarea placeholder="e.g., dreamy lo-fi beat at 90 bpm" />
         </PromptInputBody>
         <PromptInputFooter className="flex w-full justify-end">
-          <PromptInputSubmit disabled={!hasText} />
+          <PromptInputSubmit disabled={!hasText || isSubmitting} status={isSubmitting ? 'submitted' : undefined} />
         </PromptInputFooter>
       </PromptInput>
 
