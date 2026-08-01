@@ -42,6 +42,7 @@ const GenerateContent = () => {
     api.chats.get,
     chatId && isAuthenticated ? { id: chatId as Id<'chats'> } : 'skip'
   )
+  const isChatLoading = Boolean(chatId && isAuthenticated && chat === undefined)
   const displayTitle = chat?.title || title || prompt || 'Welcome to Stroop'
 
   const prevChatIdRef = useRef<string | undefined>(undefined)
@@ -122,7 +123,7 @@ const GenerateContent = () => {
     <StrudelCodeViewer
       key={viewerKey}
       snippets={snippets}
-      isLoading={snippets.length === 0 && !!prompt && !error}
+      isLoading={isChatLoading || (snippets.length === 0 && !!prompt && !error)}
       isCodeStreaming={isCodeStreaming}
       onCompileError={handleCompileError}
       onFixInChat={handleFixInChat}
@@ -145,7 +146,7 @@ const GenerateContent = () => {
         </h2>
       </div>
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="shrink-0">
           <Icons.warning className="h-4 w-4" />
           <AlertTitle>Something went wrong</AlertTitle>
         </Alert>
@@ -166,13 +167,13 @@ const GenerateContent = () => {
   )
 
   return (
-    <div className="flex h-full w-full max-w-full overflow-hidden p-4">
+    <div className="flex h-full min-h-0 w-full max-w-full flex-1 overflow-hidden p-4">
       {isMobile ? (
-        <div className="flex w-full min-h-0 flex-col gap-4">
+        <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
           {chatPanel}
         </div>
       ) : (
-        <ResizablePanelGroup orientation="horizontal" className="min-h-0">
+        <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
           <ResizablePanel
             defaultSize={480}
             minSize={288}

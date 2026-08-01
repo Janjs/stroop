@@ -13,6 +13,62 @@ const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 let strudelGuideCache: string | null = null
 let strudelExamplesCache: string | null = null
 
+function extractStrudelCodeFromText(text: string): string | null {
+  const marker = '```strudel\n'
+  const lastIdx = text.lastIndexOf(marker)
+  if (lastIdx === -1) return null
+  const codeStart = lastIdx + marker.length
+  const remaining = text.substring(codeStart)
+  const closingIdx = remaining.indexOf('```')
+  const code = closingIdx !== -1 ? remaining.substring(0, closingIdx) : remaining
+  return code.trim() || null
+}
+
+function getPreviousGenerationFromMessages(messages: UIMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]
+    if (message.role !== 'assistant') continue
+
+    for (const part of message.parts ?? []) {
+      if (part.type === 'text' && 'text' in part) {
+        const code = extractStrudelCodeFromText(part.text)
+        if (code) return code
+      }
+    }
+  }
+
+  return undefined
+}
+
+type RepairContext = {
+  type: 'compile' | 'fix'
+  error: string
+  code: string
+  originalRequest?: string
+  attempt?: number
+  maxAttempts?: number
+}
+
+function buildRepairContextBlock(repair: RepairContext): string {
+  const lines = [
+    '\n\nThe generated Strudel code needs to be fixed.',
+    `Error: ${repair.error}`,
+    '',
+    'Failing code:',
+    '```strudel',
+    repair.code,
+    '```',
+  ]
+  if (repair.originalRequest) {
+    lines.push('', `Original request: ${repair.originalRequest}`)
+  }
+  if (repair.attempt && repair.maxAttempts) {
+    lines.push('', `Auto-retry ${repair.attempt}/${repair.maxAttempts}.`)
+  }
+  lines.push('', 'Fix the error and regenerate valid Strudel code.')
+  return lines.join('\n')
+}
+
 async function getStrudelGuide(): Promise<string> {
   if (strudelGuideCache) {
     return strudelGuideCache
@@ -31,7 +87,12 @@ async function getStrudelExamples(): Promise<string> {
   return strudelExamplesCache
 }
 
-function generateCacheKey(messages: UIMessage[], model: string): string {
+function generateCacheKey(
+  messages: UIMessage[],
+  model: string,
+  currentCode?: string,
+  repairContext?: RepairContext,
+): string {
   const normalized = messages.map((m) => ({
     role: m.role,
     parts: m.parts?.map((p: any) => {
@@ -39,7 +100,7 @@ function generateCacheKey(messages: UIMessage[], model: string): string {
       return p
     }),
   }))
-  const keyData = JSON.stringify({ messages: normalized, model })
+  const keyData = JSON.stringify({ messages: normalized, model, currentCode, repairContext })
   return createHash('sha256').update(keyData).digest('hex')
 }
 
@@ -58,13 +119,15 @@ export async function POST(req: Request) {
       messages,
       model = DEFAULT_OPENAI_MODEL,
       currentCode,
+      repairContext,
     }: {
       messages: UIMessage[]
       model?: string
       currentCode?: string
+      repairContext?: RepairContext
     } = await req.json()
 
-    const cacheKey = generateCacheKey(messages, model)
+    const cacheKey = generateCacheKey(messages, model, currentCode, repairContext)
     const cached = await getCachedResponse(cacheKey)
 
     if (cached) {
@@ -86,9 +149,11 @@ export async function POST(req: Request) {
     }
 
     const [strudelGuide, strudelExamples] = await Promise.all([getStrudelGuide(), getStrudelExamples()])
-    const currentCodeContext = currentCode
-      ? `\n\nThe user currently has this Strudel code loaded. When they ask to edit or modify it, use this as the base and make the requested changes:\n\`\`\`strudel\n${currentCode}\n\`\`\``
+    const resolvedCurrentCode = currentCode ?? getPreviousGenerationFromMessages(messages)
+    const currentCodeContext = resolvedCurrentCode
+      ? `\n\nThe user has Strudel code loaded in their editor. When they ask to edit or modify it, use the code below as the base. Do not mention to the user that you received existing code — respond naturally to their request.\n\`\`\`strudel\n${resolvedCurrentCode}\n\`\`\``
       : ''
+    const repairContextBlock = repairContext ? buildRepairContextBlock(repairContext) : ''
     const systemPrompt = `You are a helpful assistant that generates Strudel live-coding music patterns.
 Use the Strudel guide below as the source of truth for syntax and capabilities.
 Study the examples carefully to understand the style, structure, and patterns of good Strudel code.
@@ -96,7 +161,7 @@ Study the examples carefully to understand the style, structure, and patterns of
 Strudel guide:
 ${strudelGuide}
 
-${strudelExamples}${currentCodeContext}
+${strudelExamples}${currentCodeContext}${repairContextBlock}
 
 RESPONSE FORMAT — follow this order strictly for EVERY response that includes code:
 

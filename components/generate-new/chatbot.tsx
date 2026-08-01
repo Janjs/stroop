@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport } from 'ai'
 import { StrudelSnippet } from '@/types/types'
 import { useQuery, useMutation, useConvexAuth } from 'convex/react'
 import { api } from '@/convex/_generated/api'
@@ -12,11 +13,6 @@ import { Id } from '@/convex/_generated/dataModel'
 import { DEFAULT_OPENAI_MODEL } from '@/lib/models'
 import { chatTitleFromPrompt, generateChatTitle } from '@/lib/chat-title'
 import useGenerateSearchParams from '@/hooks/useGenerateSearchParams'
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from '@/components/ai-elements/conversation'
 import {
   Message,
   MessageContent,
@@ -47,7 +43,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ChevronDownIcon, XIcon } from 'lucide-react'
+import { ChevronDownIcon, ArrowDownIcon, XIcon } from 'lucide-react'
 
 const MOODS = ['Happy', 'Sad', 'Dreamy', 'Energetic', 'Chill', 'Melancholic', 'Romantic', 'Mysterious']
 const GENRES = ['Jazz', 'Pop', 'R&B', 'Classical', 'Lo-fi', 'Rock', 'Blues', 'Folk']
@@ -109,6 +105,62 @@ const extractCodeFromMessage = (message: any): string | null => {
   }
   return null
 }
+
+const stripStrudelCodeFromText = (text: string): string => {
+  const marker = '```strudel\n'
+  let result = text
+  while (true) {
+    const idx = result.indexOf(marker)
+    if (idx === -1) break
+    const codeStart = idx + marker.length
+    const remaining = result.substring(codeStart)
+    const closingIdx = remaining.indexOf('```')
+    if (closingIdx === -1) {
+      result = result.substring(0, idx).trimEnd()
+      break
+    }
+    const end = codeStart + closingIdx + 3
+    result = (result.substring(0, idx) + result.substring(end)).trim()
+  }
+  return result.replace(/\n{3,}/g, '\n\n').trim()
+}
+
+const stripStrudelCodeFromMessages = (messages: any[]): any[] =>
+  messages.map((message) => {
+    if (message.parts) {
+      return {
+        ...message,
+        parts: message.parts.map((part: any) =>
+          part.type === 'text' && 'text' in part
+            ? { ...part, text: stripStrudelCodeFromText(part.text) }
+            : part
+        ),
+      }
+    }
+    if ('content' in message && typeof message.content === 'string') {
+      return { ...message, content: stripStrudelCodeFromText(message.content) }
+    }
+    return message
+  })
+
+const getPreviousGenerationCode = (
+  messages: any[],
+  currentSnippets?: StrudelSnippet[],
+): string | undefined => {
+  const fromSnippets = currentSnippets?.map((s) => s.code).filter(Boolean).join('\n\n')
+  if (fromSnippets) return fromSnippets
+
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i]
+    if (!message || message.role !== 'assistant') continue
+    const code = extractCodeFromMessage(message)
+    if (code) return code
+  }
+
+  return undefined
+}
+
+const isHiddenMessage = (message: any) => Boolean((message.metadata as { hidden?: boolean })?.hidden)
 
 const extractSnippetsFromMessages = (messages: any[]): StrudelSnippet[] => {
   const snippets: StrudelSnippet[] = []
@@ -295,6 +347,11 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const wasStreamingSnippetsRef = useRef(false)
   const codeUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isLoadingChatRef = useRef(false)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const stickToBottomRef = useRef(false)
+  const wasWaitingForResponseRef = useRef(false)
+  const activeChatKeyRef = useRef<string | undefined>(undefined)
+  const [showScrollButton, setShowScrollButton] = useState(false)
 
   const onSnippetsGeneratedRef = useRef(onSnippetsGenerated)
   onSnippetsGeneratedRef.current = onSnippetsGenerated
@@ -369,14 +426,34 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const { textInput } = usePromptInputController()
   const [, setPrompt] = useGenerateSearchParams()
 
+  const chatRequestContextRef = useRef({ currentSnippets: undefined as StrudelSnippet[] | undefined })
+  chatRequestContextRef.current.currentSnippets = currentSnippets
+
+  const chatTransport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: '/api/chat',
+        prepareSendMessagesRequest: ({ messages, body }) => ({
+          body: {
+            ...body,
+            currentCode:
+              (body as { currentCode?: string })?.currentCode ??
+              getPreviousGenerationCode(messages, chatRequestContextRef.current.currentSnippets),
+            messages: stripStrudelCodeFromMessages(messages),
+          },
+        }),
+      }),
+    [],
+  )
+
   const { messages, sendMessage: rawSendMessage, status, setMessages, stop } = useChat({
-    api: '/api/chat',
+    transport: chatTransport,
     onFinish: async () => {},
     onError: (error: Error) => {
       console.error('Chat error:', error)
       setError(error.message || 'An error occurred. Please try again.')
     },
-  } as any)
+  })
 
   const sendMessageRef = useRef(rawSendMessage)
   sendMessageRef.current = rawSendMessage
@@ -528,28 +605,29 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     totalCompileRetryCountRef.current += 1
 
     const currentMessages = messagesRef.current
-    const lastUserMessage = [...currentMessages].reverse().find((message) => message?.role === 'user')
+    const lastUserMessage = [...currentMessages]
+      .reverse()
+      .find((message) => message?.role === 'user' && !isHiddenMessage(message))
     const lastUserText =
       (lastUserMessage && 'content' in lastUserMessage ? String((lastUserMessage as any).content || '') : '') ||
       lastSubmittedPromptRef.current ||
       externalPrompt ||
       ''
-    const retryPrompt = [
-      `The generated Strudel code failed to compile (auto-retry ${totalCompileRetryCountRef.current}/${MAX_TOTAL_RETRIES}).`,
-      `Error: ${compileError.message}`,
-      '',
-      'Failing code:',
-      '```',
-      compileError.code,
-      '```',
-      '',
-      lastUserText ? `Original request: ${lastUserText}` : '',
-      'Fix the compilation error and regenerate valid Strudel code.',
-    ].filter(Boolean).join('\n')
-    const currentCode = currentSnippets?.map(s => s.code).filter(Boolean).join('\n\n') || undefined
     sendMessage(
-      { text: retryPrompt },
-      { body: { model: DEFAULT_OPENAI_MODEL, currentCode } }
+      { text: 'Please fix the compilation error.', metadata: { hidden: true } },
+      {
+        body: {
+          model: DEFAULT_OPENAI_MODEL,
+          repairContext: {
+            type: 'compile',
+            error: compileError.message,
+            code: compileError.code,
+            originalRequest: lastUserText || undefined,
+            attempt: totalCompileRetryCountRef.current,
+            maxAttempts: MAX_TOTAL_RETRIES,
+          },
+        },
+      }
     )
   }, [compileError, status, externalPrompt, sendMessage])
 
@@ -559,21 +637,18 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     if (lastHandledFixRequestIdRef.current === fixRequest.id) return
     lastHandledFixRequestIdRef.current = fixRequest.id
 
-    const fixPrompt = [
-      `The Strudel code has a syntax error. Please fix it.`,
-      `Error: ${fixRequest.message}`,
-      '',
-      'Failing code:',
-      '```',
-      fixRequest.code,
-      '```',
-      '',
-      'Fix the error and regenerate valid Strudel code.',
-    ].join('\n')
-    const currentCode = currentSnippets?.map(s => s.code).filter(Boolean).join('\n\n') || undefined
     sendMessage(
-      { text: fixPrompt },
-      { body: { model: DEFAULT_OPENAI_MODEL, currentCode } }
+      { text: 'Fix syntax error', metadata: { hidden: true } },
+      {
+        body: {
+          model: DEFAULT_OPENAI_MODEL,
+          repairContext: {
+            type: 'fix',
+            error: fixRequest.message,
+            code: fixRequest.code,
+          },
+        },
+      }
     )
   }, [fixRequest, status, sendMessage])
 
@@ -608,15 +683,17 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       return
     }
 
+    const visibleMessages = messages.filter((m) => !isHiddenMessage(m))
+
     // Don't save if we haven't received any new messages
     // Note: checking > ensures we only save when we add content. 
     // If we just loaded from DB, messages.length == lastSaved.
-    if (messages.length <= lastSavedMessagesLengthRef.current) {
+    if (visibleMessages.length <= lastSavedMessagesLengthRef.current) {
       return
     }
 
     const saveChat = async () => {
-      const firstUserMessage = messages.find((m) => m.role === 'user')
+      const firstUserMessage = visibleMessages.find((m) => m.role === 'user')
       if (!firstUserMessage) return
 
       const firstUserText =
@@ -627,7 +704,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
             : ''
       const title = chatTitleFromPrompt(firstUserText)
 
-      const messagesToSave = messages.map((m) => ({
+      const messagesToSave = visibleMessages.map((m) => ({
         id: String(m.id),
         role: m.role as 'user' | 'assistant',
         content: 'content' in m ? String(m.content || '') : '',
@@ -647,7 +724,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         }
         // Creation is handled when the first message is submitted
 
-        lastSavedMessagesLengthRef.current = messages.length
+        lastSavedMessagesLengthRef.current = visibleMessages.length
       } catch (err) {
         console.error('Failed to save chat:', err)
       }
@@ -751,15 +828,9 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       void ensureChatCreated(textToSend)
     }
 
-    const currentCode = currentSnippets?.map(s => s.code).filter(Boolean).join('\n\n') || undefined
     sendMessage(
       { text: textToSend },
-      {
-        body: {
-          model: DEFAULT_OPENAI_MODEL,
-          currentCode,
-        },
-      }
+      { body: { model: DEFAULT_OPENAI_MODEL } }
     )
 
     setSelectedMood(null)
@@ -773,11 +844,86 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const hasText = Boolean(textInput.value?.trim()) || hasSelections
   const canSubmit = hasText && status === 'ready' && credits !== undefined && anonymousSessionId !== null && (isAuthenticated || (credits.credits ?? 0) > 0)
   const showSignInPrompt = !isAuthenticated && credits !== undefined && credits.credits === 0
+  const visibleMessages = messages.filter((message) => !isHiddenMessage(message))
+  const isWaitingForResponse = status === 'submitted' || status === 'streaming'
+  const showResponseSpacer = visibleMessages.length > 1 || isWaitingForResponse
+  const activeChatKey = chatId ?? resetKey ?? undefined
+
+  const updateScrollButton = useCallback(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 70
+    setShowScrollButton(!atBottom)
+    if (!atBottom) {
+      stickToBottomRef.current = false
+    }
+  }, [])
+
+  const scrollToChatPosition = useCallback(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const overflows = el.scrollHeight > el.clientHeight + 1
+    const shouldStartAtBottom = overflows && visibleMessages.length > 1
+    el.scrollTop = shouldStartAtBottom ? el.scrollHeight : 0
+    stickToBottomRef.current = false
+    updateScrollButton()
+  }, [updateScrollButton, visibleMessages.length])
+
+  useLayoutEffect(() => {
+    if (activeChatKey === activeChatKeyRef.current) return
+    activeChatKeyRef.current = activeChatKey
+    stickToBottomRef.current = false
+    wasWaitingForResponseRef.current = false
+    scrollToChatPosition()
+  }, [activeChatKey, scrollToChatPosition])
+
+  useLayoutEffect(() => {
+    if (isLoadingChatRef.current) {
+      isLoadingChatRef.current = false
+      scrollToChatPosition()
+    }
+  })
+
+  useLayoutEffect(() => {
+    if (isWaitingForResponse && !wasWaitingForResponseRef.current) {
+      stickToBottomRef.current = true
+      const el = scrollContainerRef.current
+      if (el) {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+      }
+    }
+    if (!isWaitingForResponse) {
+      stickToBottomRef.current = false
+    }
+    wasWaitingForResponseRef.current = isWaitingForResponse
+  }, [isWaitingForResponse])
+
+  useLayoutEffect(() => {
+    if (!isWaitingForResponse || !stickToBottomRef.current) return
+    const el = scrollContainerRef.current
+    if (el) {
+      el.scrollTop = el.scrollHeight
+    }
+    updateScrollButton()
+  }, [messages, isWaitingForResponse, updateScrollButton])
+
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const handleScroll = () => updateScrollButton()
+    el.addEventListener('scroll', handleScroll, { passive: true })
+    window.addEventListener('resize', handleScroll)
+    handleScroll()
+    return () => {
+      el.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('resize', handleScroll)
+    }
+  }, [updateScrollButton, activeChatKey, visibleMessages.length])
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex min-h-0 flex-1 flex-col">
       {error && (
-        <Alert variant="destructive" className="mb-4">
+        <Alert variant="destructive" className="mb-4 shrink-0">
           <AlertTitle>Error</AlertTitle>
           <AlertDescription className="flex items-center justify-between">
             <span>{error}</span>
@@ -790,7 +936,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         </Alert>
       )}
       {showSignInPrompt && (
-        <Alert className="mb-4">
+        <Alert className="mb-4 shrink-0">
           <AlertTitle>Sign in required</AlertTitle>
           <AlertDescription className="flex items-center justify-between">
             <span>You've used all 3 free generations. Sign in to continue generating Strudel code.</span>
@@ -801,11 +947,15 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           </AlertDescription>
         </Alert>
       )}
-      <ConversationWithFade className="flex-1 min-h-0">
-        <Conversation className="flex-1 min-h-0">
-          <ConversationContent className="gap-4">
+      <ConversationWithFade className="min-h-0 flex-1 overflow-hidden">
+        <div
+          ref={scrollContainerRef}
+          className="min-h-0 flex-1 overflow-y-auto"
+          role="log"
+        >
+          <div className="flex flex-col gap-4 p-4">
             {(() => {
-              const messagesToRender = [...messages]
+              const messagesToRender = [...visibleMessages]
               if ((status === 'submitted' || status === 'streaming') && messagesToRender.length > 0 && messagesToRender[messagesToRender.length - 1].role !== 'assistant') {
                 messagesToRender.push({
                   id: 'generating-placeholder',
@@ -939,10 +1089,30 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                 )
               })
             })()}
-          </ConversationContent>
-          <ConversationScrollButton />
-        </Conversation>
+            <div
+              aria-hidden
+              className={`shrink-0 flex-1 min-h-0 ${showResponseSpacer ? 'min-h-[24vh]' : ''}`}
+            />
+          </div>
+        </div>
+        {showScrollButton && (
+          <Button
+            className="absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full dark:bg-background dark:hover:bg-muted"
+            onClick={() => {
+              const el = scrollContainerRef.current
+              if (!el) return
+              stickToBottomRef.current = true
+              el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+            }}
+            size="icon"
+            type="button"
+            variant="outline"
+          >
+            <ArrowDownIcon className="size-4" />
+          </Button>
+        )}
       </ConversationWithFade>
+      <div className="shrink-0">
       <Collapsible open={isSuggestionsOpen} onOpenChange={setIsSuggestionsOpen} className="group">
         <CollapsibleTrigger className="flex items-center justify-between gap-2 mb-1.5 w-full">
           <Label className="text-sm font-semibold text-muted-foreground">Suggestions</Label>
@@ -1010,6 +1180,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           </div>
         </PromptInputFooter>
       </PromptInput>
+      </div>
     </div>
   )
 }

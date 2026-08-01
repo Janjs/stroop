@@ -179,9 +179,9 @@ export function AuthButton({ variant = 'header' }: AuthButtonProps) {
     const displayName = user?.name || user?.email || 'User'
 
     return (
-      <SidebarFooter className="px-2 pt-2 pb-4">
-        <SidebarMenu>
-          <SidebarMenuItem>
+      <SidebarFooter className="mt-auto px-2 pt-2 pb-4 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0">
+        <SidebarMenu className="group-data-[collapsible=icon]:items-center">
+          <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
             <UserMenu
               user={user}
               initials={initials}
@@ -196,16 +196,16 @@ export function AuthButton({ variant = 'header' }: AuthButtonProps) {
                   size="lg"
                   variant="outline"
                   tooltip={displayName}
-                  className="h-10 focus-visible:ring-0 data-[state=open]:bg-muted"
+                  className="h-10 focus-visible:ring-0 data-[state=open]:bg-muted group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
                 >
-                  <Avatar className="size-7">
+                  <Avatar className="size-7 group-data-[collapsible=icon]:size-6">
                     <AvatarImage
                       src={(user?.image as string) ?? undefined}
                       alt={(user?.name as string) ?? (user?.email as string) ?? 'User'}
                     />
                     <AvatarFallback className="text-xs">{initials}</AvatarFallback>
                   </Avatar>
-                  <div className="grid flex-1 text-left text-xs leading-tight">
+                  <div className="grid flex-1 text-left text-xs leading-tight group-data-[collapsible=icon]:hidden">
                     <span className="truncate font-medium">{displayName}</span>
                     {user?.email && user?.name && (
                       <span className="truncate text-muted-foreground">{user.email}</span>

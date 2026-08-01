@@ -27,13 +27,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+
 export function AppSidebar() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar()
   const isCollapsed = state === 'collapsed'
-  const { isAuthenticated } = useConvexAuth()
+  const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth()
 
   const { results: chats, status, loadMore } = usePaginatedQuery(
     api.chats.list,
@@ -74,7 +75,11 @@ export function AppSidebar() {
     return () => window.clearTimeout(timeoutId)
   }, [chats])
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !isAuthLoading) {
+    return null
+  }
+
+  if (isAuthLoading && !pathname.startsWith('/generate')) {
     return null
   }
 
@@ -146,7 +151,7 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      {(isMobile || !isCollapsed) && (
+      {isAuthenticated && (isMobile || !isCollapsed) && (
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel>Chats</SidebarGroupLabel>
@@ -167,14 +172,10 @@ export function AppSidebar() {
                     />
                   ))}
                 </SidebarMenu>
-              ) : (
-                <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                  No chat history yet
-                </div>
-              )}
+              ) : null}
             </SidebarGroupContent>
           </SidebarGroup>
-          {status === 'CanLoadMore' && (
+          {isAuthenticated && status === 'CanLoadMore' && (
             <div className="p-4 flex justify-center">
               <SidebarMenuButton onClick={() => loadMore(20)} className='justify-center text-muted-foreground'>
                 Load More
@@ -183,7 +184,7 @@ export function AppSidebar() {
           )}
         </SidebarContent>
       )}
-      <AuthButton variant="sidebar" />
+      {isAuthenticated && <AuthButton variant="sidebar" />}
     </Sidebar>
   )
 }

@@ -18,7 +18,7 @@ export default function Header() {
   const searchParams = useSearchParams()
   const chatId = searchParams.get('chatId')
   const title = searchParams.get('title')
-  const { isAuthenticated } = useConvexAuth()
+  const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth()
   const pathname = usePathname()
   const isGeneratePage = pathname === '/generate'
   const isSharePage = pathname === '/generate/share'
@@ -30,7 +30,7 @@ export default function Header() {
 
   const displayPrompt = isSharePage ? null : chat?.title || title || prompt || (isGeneratePage ? 'Welcome to Stroop' : null)
 
-  if (isGeneratePage && isAuthenticated) {
+  if (isGeneratePage && (isAuthenticated || isAuthLoading)) {
     return null
   }
 

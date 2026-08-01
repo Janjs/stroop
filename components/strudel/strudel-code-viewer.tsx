@@ -1,13 +1,14 @@
 'use client'
 
-import { createElement, useEffect, useRef, useState } from 'react'
+import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import { StrudelSnippet } from '@/types/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Check, Copy, MessageSquare, Minus, Pause, Play, Plus, Share2 } from 'lucide-react'
 import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
-import { setStrudelEditorCode } from '@/lib/strudel-editor-code'
+import { configureStrudelEditor, evaluateStrudelEditor, playStrudelEditor, setStrudelEditorCode, type StrudelEditorElement } from '@/lib/strudel-editor-code'
+import { useStrudelSelectionEditor } from '@/components/strudel/strudel-selection-editor'
 import { useTheme } from 'next-themes'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
@@ -30,17 +31,6 @@ interface StrudelCodeViewerProps {
   resetKey?: string | null
   chatId?: string
   shareTitle?: string
-}
-
-type StrudelEditorElement = HTMLElement & {
-  editor?: {
-    setCode?: (code: string) => void
-    evaluate?: (autostart?: boolean) => void | Promise<unknown>
-    start?: () => void
-    stop?: () => void
-    flash?: (ms?: number, range?: { from: number; to: number }) => void
-    setCursorLocation?: (col: number) => void
-  }
 }
 
 const normalizeStrudelCode = (code: string) => {
@@ -144,6 +134,29 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   const makeShareable = useMutation(api.chats.makeShareable)
   const anonymousSessionId = useAnonymousSession()
 
+  const handleSelectionApplied = useCallback((code: string) => {
+    const normalizedCode = normalizeStrudelCode(code)
+    currentEditorCodeRef.current = normalizedCode
+    lastSetNormalizedCodeRef.current = normalizedCode
+    lastEvaluatedCodeRef.current = normalizedCode
+    setReplError(null)
+  }, [])
+
+  const { panel: selectionPanel, handlePointerUp, refreshSelection } = useStrudelSelectionEditor({
+    replRef,
+    isEditorReady,
+    onApplied: handleSelectionApplied,
+  })
+
+  useEffect(() => {
+    if (!isEditorReady) return
+    const container = replRef.current?.nextElementSibling
+    if (!(container instanceof HTMLElement)) return
+    const onKeyUp = () => window.requestAnimationFrame(refreshSelection)
+    container.addEventListener('keyup', onKeyUp)
+    return () => container.removeEventListener('keyup', onKeyUp)
+  }, [isEditorReady, refreshSelection])
+
   useEffect(() => {
     void loadStrudelRepl()
   }, [])
@@ -202,6 +215,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
     const apply = () => {
       const container = replRef.current?.nextElementSibling as HTMLElement | null
       if (!container?.querySelector('.cm-editor')) return
+      configureStrudelEditor(replRef.current)
       container.id = 'strudel-repl-container'
       const root = getComputedStyle(document.documentElement)
       const get = (v: string) => root.getPropertyValue(v).trim() || 'inherit'
@@ -265,9 +279,10 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
 #strudel-repl-container .cm-content{box-sizing:border-box;color:${fg} !important;min-height:100%;padding-bottom:${contentBufferPx}px !important;}
 #strudel-repl-container .cm-gutters{background-color:${isDark ? muted : bg} !important;border-color:${border};min-height:100%;}
 #strudel-repl-container .cm-gutterElement{min-width:3ch;text-align:right;}
-#strudel-repl-container .cm-activeLineGutter{background-color:${accent} !important;color:${isDark ? accentFg : fg} !important;}
+#strudel-repl-container .cm-activeLineGutter{background-color:color-mix(in oklab, ${accent} 35%, transparent) !important;color:${isDark ? accentFg : fg} !important;}
 #strudel-repl-container .cm-activeLine{background-color:${isDark ? muted : bg} !important;}
-#strudel-repl-container .cm-selectionMatch,#strudel-repl-container .cm-selectionBackground{background-color:${accent} !important;}
+#strudel-repl-container .cm-selectionMatch,#strudel-repl-container .cm-selectionBackground{background-color:color-mix(in oklab, ${accent} 18%, transparent) !important;}
+#strudel-repl-container .cm-content span[style*="outline"]{outline:1px solid color-mix(in oklab, ${primary} 28%, transparent) !important;background-color:color-mix(in oklab, ${primary} 7%, transparent) !important;border-radius:2px;}
 #strudel-repl-container .cm-editor.cm-focused{outline-color:${ring};}
 #strudel-repl-container .cm-cursor{border-left-color:${fg};}
 #strudel-repl-container .cm-editor .cm-flash{background-color:color-mix(in oklab, ${primary} 20%, transparent) !important;outline:1px solid color-mix(in oklab, ${primary} 55%, transparent);border-radius:2px;}
@@ -343,22 +358,12 @@ ${tokenRules}
     window.requestAnimationFrame(() => {
       if (!normalizedCode.trim()) return
       if (!repl.editor) return
-      try {
-        const result = repl.editor.evaluate?.(false)
-        if (result && typeof (result as Promise<unknown>).then === 'function') {
-          void (result as Promise<unknown>).catch((error) => {
-            const message = error instanceof Error ? error.message : String(error)
-            if (!message.toLowerCase().includes('no code to evaluate')) {
-              throw error
-            }
-          })
-        }
-      } catch (error) {
+      void evaluateStrudelEditor(repl, false).catch((error) => {
         const message = error instanceof Error ? error.message : String(error)
         if (!message.toLowerCase().includes('no code to evaluate')) {
-          throw error
+          console.error('Failed to evaluate Strudel code:', error)
         }
-      }
+      })
     })
   }, [activeSnippet?.code, isEditorReady, isCodeStreaming])
 
@@ -429,11 +434,7 @@ ${tokenRules}
       return
     }
     try {
-      const result = repl.editor.evaluate?.()
-      if (result && typeof (result as Promise<unknown>).then === 'function') {
-        await result
-      }
-      repl.editor.start?.()
+      lastEvaluatedCodeRef.current = (await playStrudelEditor(repl, lastEvaluatedCodeRef.current)) ?? lastEvaluatedCodeRef.current
       setIsPlaying(true)
     } catch (error) {
       console.error('Failed to start Strudel playback:', error)
@@ -466,9 +467,7 @@ ${tokenRules}
       return
     }
     try {
-      const result = editor.evaluate?.()
-      if (result && typeof (result as Promise<unknown>).then === 'function') await result
-      editor.start?.()
+      await playStrudelEditor(sharePreviewRef.current)
       isSharePlayingRef.current = true
       setIsSharePlaying(true)
     } catch (error) {
@@ -522,8 +521,10 @@ ${tokenRules}
         <div
           className="strudel-main-editor relative flex-1 min-h-0"
           data-editor-initialized={isEditorInitialized}
+          onMouseUp={handlePointerUp}
         >
           {createElement('strudel-editor', { ref: replRef, className: 'w-full flex-none h-0 min-h-0 overflow-hidden' })}
+          {selectionPanel}
           {isLoading ? (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background/60 text-sm text-muted-foreground">
               Waiting for code...

@@ -373,7 +373,7 @@ strudel-editor + div .cm-gutters {
 }
 
 strudel-editor + div .cm-activeLineGutter {
-  background-color: var(--accent) !important;
+  background-color: color-mix(in oklab, var(--accent) 35%, transparent) !important;
   color: var(--accent-foreground) !important;
 }
 
@@ -383,7 +383,7 @@ strudel-editor + div .cm-activeLine {
 
 strudel-editor + div .cm-selectionMatch,
 strudel-editor + div .cm-selectionBackground {
-  background-color: var(--accent) !important;
+  background-color: color-mix(in oklab, var(--accent) 18%, transparent) !important;
 }
 
 strudel-editor + div .cm-editor.cm-focused {

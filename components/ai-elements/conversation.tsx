@@ -4,20 +4,62 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowDownIcon } from "lucide-react";
 import type { ComponentProps } from "react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 
 export type ConversationProps = ComponentProps<typeof StickToBottom>;
 
-export const Conversation = ({ className, ...props }: ConversationProps) => (
+export const Conversation = ({ className, initial = false, ...props }: ConversationProps) => (
   <StickToBottom
     className={cn("relative flex-1 overflow-y-hidden", className)}
-    initial="smooth"
-    resize="smooth"
+    initial={initial}
     role="log"
     {...props}
   />
 );
+
+export const ConversationScrollOnResponse = ({
+  active,
+}: {
+  active: boolean;
+}) => {
+  const { scrollToBottom } = useStickToBottomContext();
+  const wasActiveRef = useRef(false);
+
+  useEffect(() => {
+    if (active && !wasActiveRef.current) {
+      scrollToBottom({ animation: "smooth" });
+    }
+    wasActiveRef.current = active;
+  }, [active, scrollToBottom]);
+
+  return null;
+};
+
+export const ConversationScrollReset = ({
+  chatId,
+}: {
+  chatId?: string;
+}) => {
+  const { scrollRef, stopScroll } = useStickToBottomContext();
+  const previousChatIdRef = useRef<string | undefined>(chatId);
+
+  useEffect(() => {
+    if (chatId === previousChatIdRef.current) {
+      return;
+    }
+
+    stopScroll();
+    requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = 0;
+      }
+    });
+    previousChatIdRef.current = chatId;
+  }, [chatId, scrollRef, stopScroll]);
+
+  return null;
+};
 
 export type ConversationContentProps = ComponentProps<
   typeof StickToBottom.Content
