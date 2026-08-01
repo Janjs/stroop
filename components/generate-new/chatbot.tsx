@@ -262,7 +262,7 @@ function ConversationWithFade({ children, className, onViewportReady }: { childr
 interface ChatbotProps {
   prompt?: string
   chatId?: string
-  onSnippetsGenerated?: (snippets: StrudelSnippet[], options?: { isStreaming?: boolean }) => void
+  onSnippetsGenerated?: (snippets: StrudelSnippet[], options?: { isStreaming?: boolean; fromChatLoad?: boolean }) => void
   onToolError?: (message: string) => void
   onChatCreated?: (chatId: string) => void
   compileError?: { message: string; code: string; id: number } | null
@@ -500,7 +500,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           }
           setMessages(existingChat.messages as any)
           if (existingChat.snippets && existingChat.snippets.length > 0) {
-            onSnippetsGeneratedRef.current?.(existingChat.snippets)
+            onSnippetsGeneratedRef.current?.(existingChat.snippets, { fromChatLoad: true })
           }
         }
       }

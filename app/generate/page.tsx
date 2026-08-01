@@ -54,8 +54,9 @@ const GenerateContent = () => {
     createdChatIdRef.current = undefined
   }, [chatId, newParam])
 
-  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { isStreaming?: boolean }) => {
+  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { isStreaming?: boolean; fromChatLoad?: boolean }) => {
     const isStreaming = options?.isStreaming ?? false
+    const fromChatLoad = options?.fromChatLoad ?? false
     setSnippets(newSnippets.slice(-1))
     setIsCodeStreaming(isStreaming)
     setError(null)
@@ -66,7 +67,7 @@ const GenerateContent = () => {
       setFixRequest(null)
     }
     
-    if (isMobile && newSnippets.some((snippet) => Boolean(snippet.code?.trim()))) {
+    if (isMobile && !fromChatLoad && newSnippets.some((snippet) => Boolean(snippet.code?.trim()))) {
       if (!userDismissedDrawerRef.current) {
         setIsDrawerOpen(true)
       }
