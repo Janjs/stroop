@@ -335,6 +335,10 @@
   font-family: var(--font-fascinate);
 }
 
+.strudel-main-editor[data-editor-initialized='false'] > strudel-editor + div {
+  visibility: hidden;
+}
+
 strudel-editor + div {
   flex: 1 1 auto;
   min-height: 0;
@@ -419,4 +423,19 @@ strudel-editor + div .cm-cursor {
 
 .strudel-share-preview .cm-activeLine {
   background: transparent !important;
+}
+
+@keyframes title-marquee {
+  0%,
+  5% {
+    transform: translateX(0);
+  }
+  95%,
+  100% {
+    transform: translateX(var(--marquee-offset, 0));
+  }
+}
+
+.animate-title-marquee {
+  animation: title-marquee var(--marquee-duration, 4s) linear infinite;
 }

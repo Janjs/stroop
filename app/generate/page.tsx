@@ -3,13 +3,22 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { StrudelSnippet } from '@/types/types'
 import { Alert, AlertTitle } from '@/components/ui/alert'
-import { Card, CardContent } from '@/components/ui/card'
 import { Icons } from '@/components/icons'
 import Chatbot from '@/components/generate-new/chatbot'
+import { ChatTitleLabel } from '@/components/chat-title-label'
 import { useSearchParams } from 'next/navigation'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { useIsMobile } from '@/hooks/use-mobile'
 import StrudelCodeViewer from '@/components/strudel/strudel-code-viewer'
+import { SidebarTrigger } from '@/components/ui/sidebar'
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from '@/components/ui/resizable'
+import { useConvexAuth, useQuery } from 'convex/react'
+import { api } from '@/convex/_generated/api'
+import { Id } from '@/convex/_generated/dataModel'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,10 +31,18 @@ const GenerateContent = () => {
   const searchParams = useSearchParams()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [isTitleHovered, setIsTitleHovered] = useState(false)
   const userDismissedDrawerRef = useRef(false)
 
   const prompt = searchParams.get('prompt') || undefined
   const chatId = searchParams.get('chatId') || undefined
+  const title = searchParams.get('title') || undefined
+  const { isAuthenticated } = useConvexAuth()
+  const chat = useQuery(
+    api.chats.get,
+    chatId && isAuthenticated ? { id: chatId as Id<'chats'> } : 'skip'
+  )
+  const displayTitle = chat?.title || title || prompt || 'Welcome to Stroop'
 
   const prevChatIdRef = useRef<string | undefined>(undefined)
   const createdChatIdRef = useRef<string | undefined>(undefined)
@@ -57,7 +74,11 @@ const GenerateContent = () => {
   const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { isStreaming?: boolean; fromChatLoad?: boolean }) => {
     const isStreaming = options?.isStreaming ?? false
     const fromChatLoad = options?.fromChatLoad ?? false
-    setSnippets(newSnippets.slice(-1))
+    setSnippets((prev) => {
+      const next = newSnippets.slice(-1)
+      if (prev[0]?.code === next[0]?.code) return prev
+      return next
+    })
     setIsCodeStreaming(isStreaming)
     setError(null)
     
@@ -97,9 +118,7 @@ const GenerateContent = () => {
     setIsDrawerOpen(true)
   }, [])
 
-  const showEditor = Boolean(snippets[0]?.code?.trim())
-
-  const codeViewer = showEditor ? (
+  const codeViewer = (
     <StrudelCodeViewer
       key={viewerKey}
       snippets={snippets}
@@ -111,43 +130,62 @@ const GenerateContent = () => {
       chatId={chatId}
       shareTitle={searchParams.get('title') || prompt}
     />
-  ) : (
-    <Card className="h-full flex flex-col overflow-hidden">
-      <CardContent className="flex-1 min-h-0 flex flex-col p-0">
-        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-          {snippets.length === 0 && !!prompt && !error ? 'Generating Strudel code...' : 'Your Strudel code will appear here.'}
-        </div>
-      </CardContent>
-    </Card>
+  )
+
+  const chatPanel = (
+    <>
+      <div
+        className="flex min-w-0 shrink-0 items-center gap-2"
+        onMouseEnter={() => setIsTitleHovered(true)}
+        onMouseLeave={() => setIsTitleHovered(false)}
+      >
+        <SidebarTrigger className="md:hidden" />
+        <h2 className="min-w-0 flex-1 font-outfit text-base">
+          <ChatTitleLabel title={displayTitle} isHovered={isTitleHovered} />
+        </h2>
+      </div>
+      {error && (
+        <Alert variant="destructive">
+          <Icons.warning className="h-4 w-4" />
+          <AlertTitle>Something went wrong</AlertTitle>
+        </Alert>
+      )}
+      <Chatbot
+        prompt={prompt}
+        chatId={chatId}
+        onSnippetsGenerated={handleSnippetsGenerated}
+        onToolError={handleToolError}
+        onChatCreated={(id) => { createdChatIdRef.current = id }}
+        compileError={compileError}
+        fixRequest={fixRequest}
+        resetKey={searchParams.get('new')}
+        onToolClick={handleToolClick}
+        currentSnippets={snippets}
+      />
+    </>
   )
 
   return (
-    <div className="flex w-full max-w-full h-full gap-4 px-4 pb-4 overflow-hidden">
-      <div className="flex w-full md:w-72 lg:w-[25rem] flex-col gap-4 flex-shrink-0">
-        {error && (
-          <Alert variant="destructive">
-            <Icons.warning className="h-4 w-4" />
-            <AlertTitle>Something went wrong</AlertTitle>
-          </Alert>
-        )}
-        <Chatbot
-          prompt={prompt}
-          chatId={chatId}
-          onSnippetsGenerated={handleSnippetsGenerated}
-          onToolError={handleToolError}
-          onChatCreated={(id) => { createdChatIdRef.current = id }}
-          compileError={compileError}
-          fixRequest={fixRequest}
-          resetKey={searchParams.get('new')}
-          onToolClick={handleToolClick}
-          currentSnippets={snippets}
-        />
-      </div>
-
-      {!isMobile && (
-        <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
-          {codeViewer}
+    <div className="flex h-full w-full max-w-full overflow-hidden p-4">
+      {isMobile ? (
+        <div className="flex w-full min-h-0 flex-col gap-4">
+          {chatPanel}
         </div>
+      ) : (
+        <ResizablePanelGroup orientation="horizontal" className="min-h-0">
+          <ResizablePanel
+            defaultSize={480}
+            minSize={288}
+            maxSize="50%"
+            className="flex min-h-0 flex-col gap-4"
+          >
+            {chatPanel}
+          </ResizablePanel>
+          <ResizableHandle className="w-4 bg-transparent after:w-full" />
+          <ResizablePanel minSize={400} className="min-h-0 overflow-hidden">
+            {codeViewer}
+          </ResizablePanel>
+        </ResizablePanelGroup>
       )}
 
       {isMobile && (

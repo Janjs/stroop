@@ -150,13 +150,15 @@ export const update = mutation({
     const isOwner = (userId && chat.userId === userId) || (args.sessionId && chat.sessionId === args.sessionId);
     if (!isOwner) throw new Error("Unauthorized");
 
-    const updates: Record<string, unknown> = {
-      updatedAt: Date.now(),
-    };
+    const updates: Record<string, unknown> = {};
 
     if (args.title !== undefined) updates.title = args.title;
     if (args.messages !== undefined) updates.messages = args.messages;
     if (args.snippets !== undefined) updates.snippets = args.snippets;
+
+    if (args.messages !== undefined || args.snippets !== undefined) {
+      updates.updatedAt = Date.now();
+    }
 
     await ctx.db.patch(args.id, updates);
     return args.id;

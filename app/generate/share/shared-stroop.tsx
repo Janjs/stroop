@@ -30,9 +30,12 @@ function SharedStroop() {
   const chat = useQuery(api.chats.getShared, chatId ? { id: chatId as Id<'chats'> } : 'skip')
   const snippet = (chat?.snippets?.[0] as StrudelSnippet | undefined)
   const editorRef = useRef<StrudelEditorElement | null>(null)
+  const isPlayingRef = useRef(false)
   const [isReady, setIsReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const { resolvedTheme } = useTheme()
+
+  isPlayingRef.current = isPlaying
 
   useEffect(() => {
     void loadStrudelRepl()
@@ -55,6 +58,7 @@ function SharedStroop() {
   useEffect(() => {
     const stopPlayback = () => {
       editorRef.current?.editor?.stop?.()
+      isPlayingRef.current = false
       setIsPlaying(false)
     }
     const stopWhenHidden = () => {
@@ -111,13 +115,15 @@ function SharedStroop() {
   const togglePlayback = async () => {
     const editor = editorRef.current?.editor
     if (!editor) return
-    if (isPlaying) {
+    if (isPlayingRef.current) {
       editor.stop?.()
+      isPlayingRef.current = false
       setIsPlaying(false)
       return
     }
     await editor.evaluate?.()
     editor.start?.()
+    isPlayingRef.current = true
     setIsPlaying(true)
   }
 
@@ -150,7 +156,10 @@ function SharedStroop() {
               variant="outline"
               size="icon"
               className={`h-9 w-9 shrink-0 rounded-full ${isPlaying ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
-              onClick={togglePlayback}
+              onPointerDown={(event) => {
+                event.preventDefault()
+                void togglePlayback()
+              }}
               disabled={!isReady}
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >

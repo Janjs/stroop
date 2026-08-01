@@ -5,11 +5,12 @@ import { useChat } from '@ai-sdk/react'
 import { StrudelSnippet } from '@/types/types'
 import { useQuery, useMutation, useConvexAuth } from 'convex/react'
 import { api } from '@/convex/_generated/api'
-import { useAuthActions } from '@convex-dev/auth/react'
+import { useSignIn } from '@/hooks/useSignIn'
 import { useAnonymousSession } from '@/hooks/useAnonymousSession'
-import { usePathname, useSearchParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { Id } from '@/convex/_generated/dataModel'
 import { DEFAULT_OPENAI_MODEL } from '@/lib/models'
+import { chatTitleFromPrompt, generateChatTitle } from '@/lib/chat-title'
 import useGenerateSearchParams from '@/hooks/useGenerateSearchParams'
 import {
   Conversation,
@@ -258,7 +259,6 @@ function ConversationWithFade({ children, className, onViewportReady }: { childr
   )
 }
 
-
 interface ChatbotProps {
   prompt?: string
   chatId?: string
@@ -281,6 +281,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const lastAutoPromptRef = useRef<string>('')
   const handledToolCallIdsRef = useRef(new Set<string>())
   const currentChatIdRef = useRef<string | null>(chatId || null)
+  const isCreatingChatRef = useRef(false)
   const lastSavedMessagesLengthRef = useRef<number>(0)
   const lastSubmittedPromptRef = useRef<string | null>(null)
   const lastHandledCompileErrorIdRef = useRef<number | null>(null)
@@ -290,6 +291,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const lastSnippetScopeKeyRef = useRef<string | null>(null)
 
   const lastStreamedCodeRef = useRef<string | null>(null)
+  const lastPushedCodeRef = useRef<string | null>(null)
+  const wasStreamingSnippetsRef = useRef(false)
   const codeUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isLoadingChatRef = useRef(false)
 
@@ -300,119 +303,75 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const onToolClickRef = useRef(onToolClick)
   onToolClickRef.current = onToolClick
 
+  const pushSnippets = useCallback((snippets: StrudelSnippet[], options?: { isStreaming?: boolean; fromChatLoad?: boolean }) => {
+    const code = snippets[0]?.code?.trim()
+    if (!code) return
+    const isStreaming = options?.isStreaming ?? false
+
+    if (!options?.fromChatLoad && code === lastPushedCodeRef.current) {
+      if (wasStreamingSnippetsRef.current && !isStreaming) {
+        wasStreamingSnippetsRef.current = false
+        onSnippetsGeneratedRef.current?.(snippets, options)
+      }
+      return
+    }
+
+    lastPushedCodeRef.current = code
+    wasStreamingSnippetsRef.current = isStreaming
+    onSnippetsGeneratedRef.current?.(snippets, options)
+  }, [])
+
   const { isAuthenticated } = useConvexAuth()
-  const { signIn } = useAuthActions()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const { handleSignIn, isSigningIn } = useSignIn()
   const router = useRouter()
   const anonymousSessionId = useAnonymousSession()
   const credits = useQuery(api.credits.getCredits, { anonymousSessionId: anonymousSessionId ?? undefined })
   const useCredit = useMutation(api.credits.useCredit)
   const createChat = useMutation(api.chats.create)
   const updateChat = useMutation(api.chats.update)
+
+  const ensureChatCreated = useCallback(async (userText: string) => {
+    if (!isAuthenticated || chatId || currentChatIdRef.current || isCreatingChatRef.current) {
+      return
+    }
+
+    isCreatingChatRef.current = true
+    const provisionalTitle = chatTitleFromPrompt(userText)
+
+    try {
+      const newChatId = await createChat({
+        title: provisionalTitle,
+        messages: [],
+        snippets: [],
+      })
+
+      currentChatIdRef.current = newChatId
+      lastSavedMessagesLengthRef.current = 0
+      onChatCreated?.(newChatId)
+      router.replace(`/generate?chatId=${newChatId}`, { scroll: false })
+
+      void generateChatTitle(userText).then((title) => {
+        if (currentChatIdRef.current === newChatId && title !== provisionalTitle) {
+          void updateChat({ id: newChatId as Id<'chats'>, title })
+        }
+      })
+    } catch (e) {
+      console.error('Failed to create chat', e)
+    } finally {
+      isCreatingChatRef.current = false
+    }
+  }, [isAuthenticated, chatId, createChat, updateChat, onChatCreated, router])
   const existingChat = useQuery(
     api.chats.get,
     chatId && isAuthenticated ? { id: chatId as Id<'chats'> } : 'skip'
   )
-
-  const handleSignIn = () => {
-    const currentUrl = pathname + (searchParams.toString() ? `?${searchParams.toString()}` : '')
-    void signIn('google', { redirectTo: currentUrl })
-  }
 
   const { textInput } = usePromptInputController()
   const [, setPrompt] = useGenerateSearchParams()
 
   const { messages, sendMessage: rawSendMessage, status, setMessages, stop } = useChat({
     api: '/api/chat',
-    onFinish: async (message: any) => {
-      const code = extractCodeFromMessage(message)
-      if (code) {
-        onSnippetsGeneratedRef.current?.([{ code }])
-      }
-      // Create a new chat if we don't have one, only for authenticated users
-      if (isAuthenticated && !chatId && !currentChatIdRef.current) {
-        try {
-          // Use the prompt from URL params if available (set by handleSubmit), or try to find it in messages
-          const promptParam = searchParams.get('prompt')
-
-          // Note: messages in this closure might be stale (from start of request). 
-          // We should construct the messages array carefully.
-          // formatting the assistant message for storage
-          const assistantMessage = {
-            id: message.id || crypto.randomUUID(),
-            role: 'assistant' as const,
-            content: message.parts?.filter((p: any) => p.type === 'text').map((p: any) => p.text).join('') || '',
-            parts: message.parts,
-            createdAt: Date.now()
-          }
-
-          // Try to get user message
-          let userMessageContent = promptParam
-          if (!userMessageContent && lastSubmittedPromptRef.current) {
-            userMessageContent = lastSubmittedPromptRef.current
-          }
-
-          // Construct messages array for saving
-          // If we have messages in state, use them (filtering out the partial assistant message if present)
-          let messagesToSave: any[] = []
-
-          if (messages.length > 0) {
-            messagesToSave = messages.map(m => ({
-              id: m.id,
-              role: m.role,
-              content: 'content' in m ? String(m.content || '') : '',
-              parts: 'parts' in m ? m.parts : undefined,
-              createdAt: (m as any).createdAt instanceof Date ? (m as any).createdAt.getTime() : Date.now()
-            }))
-            // Check if the last message in state is the same as the finished message
-            const lastStateMsg = messagesToSave[messagesToSave.length - 1]
-            if (lastStateMsg.id === assistantMessage.id) {
-              messagesToSave[messagesToSave.length - 1] = assistantMessage
-            } else {
-              messagesToSave.push(assistantMessage)
-            }
-          } else {
-            // Fallback if messages state is empty
-            messagesToSave = [
-              {
-                id: crypto.randomUUID(),
-                role: 'user',
-                content: userMessageContent || 'New Chat',
-                parts: [{ type: 'text', text: userMessageContent || 'New Chat' }],
-                createdAt: Date.now() - 1000
-              },
-              assistantMessage
-            ]
-          }
-
-          const title = userMessageContent ? userMessageContent.slice(0, 50) : 'New Chat'
-
-          const snippets = extractSnippetsFromMessages(messagesToSave)
-          if (snippets.length > 0) {
-            onSnippetsGeneratedRef.current?.(snippets)
-          }
-
-          // Create chat mutation
-          const newChatId = await createChat({
-            title: title || 'New Chat',
-            messages: messagesToSave,
-            snippets: snippets,
-          })
-
-          // 1. Create Chat -> get ID.
-          currentChatIdRef.current = newChatId
-          onChatCreated?.(newChatId)
-          // 2. Redirect - preserve prompt if it exists
-          const redirectUrl = promptParam
-            ? `/generate?chatId=${newChatId}&prompt=${encodeURIComponent(promptParam)}`
-            : `/generate?chatId=${newChatId}`
-          router.push(redirectUrl)
-        } catch (e) {
-          console.error("Failed to create chat", e)
-        }
-      }
-    },
+    onFinish: async () => {},
     onError: (error: Error) => {
       console.error('Chat error:', error)
       setError(error.message || 'An error occurred. Please try again.')
@@ -449,11 +408,11 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       if (!message || message.role !== 'assistant') continue
       const code = extractCodeFromMessage(message)
       if (code) {
-        onSnippetsGeneratedRef.current?.([{ code }])
+        pushSnippets([{ code }])
         return
       }
     }
-  }, [messages, chatId, resetKey, status])
+  }, [messages, chatId, resetKey, status, pushSnippets])
 
   useEffect(() => {
     if (status !== 'streaming') {
@@ -462,7 +421,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         codeUpdateTimerRef.current = null
       }
       if (lastStreamedCodeRef.current) {
-        onSnippetsGeneratedRef.current?.([{ code: lastStreamedCodeRef.current }])
+        pushSnippets([{ code: lastStreamedCodeRef.current }])
         lastStreamedCodeRef.current = null
       }
       return
@@ -480,11 +439,11 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       codeUpdateTimerRef.current = setTimeout(() => {
         codeUpdateTimerRef.current = null
         if (lastStreamedCodeRef.current) {
-          onSnippetsGeneratedRef.current?.([{ code: lastStreamedCodeRef.current }], { isStreaming: true })
+          pushSnippets([{ code: lastStreamedCodeRef.current }], { isStreaming: true })
         }
       }, 80)
     }
-  }, [messages, status])
+  }, [messages, status, pushSnippets])
 
   // Load existing chat
   useEffect(() => {
@@ -493,7 +452,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       stopRef.current()
       setMessages([])
       currentChatIdRef.current = normalizedChatId
+      lastSavedMessagesLengthRef.current = 0
     }
+
+    if (status === 'streaming' || status === 'submitted') return
 
     if (existingChat && existingChat.messages && existingChat.messages.length > 0) {
       if (currentChatIdRef.current === existingChat._id) {
@@ -505,14 +467,15 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
             return
           }
           isLoadingChatRef.current = true
+          lastSavedMessagesLengthRef.current = existingChat.messages.length
           setMessages(existingChat.messages as any)
           if (existingChat.snippets && existingChat.snippets.length > 0) {
-            onSnippetsGeneratedRef.current?.(existingChat.snippets, { fromChatLoad: true })
+            pushSnippets(existingChat.snippets, { fromChatLoad: true })
           }
         }
       }
     }
-  }, [existingChat, setMessages, messages.length, chatId])
+  }, [existingChat, setMessages, messages.length, chatId, status])
 
   useEffect(() => {
     if (status === 'submitted' || (messages.length > 0 && messages[messages.length - 1]?.role === 'user')) {
@@ -538,12 +501,13 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       lastExternalPromptRef.current = externalPrompt
       setError(null)
       setIsSuggestionsOpen(false)
+      void ensureChatCreated(externalPrompt)
       sendMessage(
         { text: externalPrompt },
         { body: { model: DEFAULT_OPENAI_MODEL } }
       )
     }
-  }, [externalPrompt, status, sendMessage, messages.length, chatId])
+  }, [externalPrompt, status, sendMessage, messages.length, chatId, ensureChatCreated])
 
   useEffect(() => {
     const MAX_RETRIES_PER_CODE = 2
@@ -621,6 +585,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       setMessages([])
       setError(null)
       setIsSuggestionsOpen(true)
+      lastPushedCodeRef.current = null
+      wasStreamingSnippetsRef.current = false
       onSnippetsGeneratedRef.current?.([])
       currentChatIdRef.current = null
       lastSnippetScopeKeyRef.current = null
@@ -653,12 +619,13 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       const firstUserMessage = messages.find((m) => m.role === 'user')
       if (!firstUserMessage) return
 
-      const title =
+      const firstUserText =
         'content' in firstUserMessage
-          ? String(firstUserMessage.content).slice(0, 100)
+          ? String(firstUserMessage.content)
           : firstUserMessage.parts?.find((p) => p.type === 'text' && 'text' in p)
-            ? (firstUserMessage.parts.find((p) => p.type === 'text' && 'text' in p) as { text: string }).text.slice(0, 100)
-            : 'New Chat'
+            ? (firstUserMessage.parts.find((p) => p.type === 'text' && 'text' in p) as { text: string }).text
+            : ''
+      const title = chatTitleFromPrompt(firstUserText)
 
       const messagesToSave = messages.map((m) => ({
         id: String(m.id),
@@ -678,7 +645,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
             snippets: snippets,
           })
         }
-        // Creation is handled by onFinish to avoid race conditions and duplicates
+        // Creation is handled when the first message is submitted
 
         lastSavedMessagesLengthRef.current = messages.length
       } catch (err) {
@@ -691,17 +658,15 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
   const constructPrompt = () => {
     const parts: string[] = []
-    if (selectedMood) parts.push(selectedMood.toLowerCase())
-    if (selectedGenre) parts.push(selectedGenre.toLowerCase())
+    if (selectedMood) parts.push(selectedMood)
+    if (selectedGenre) parts.push(selectedGenre)
     if (selectedTempo) parts.push(`at ${selectedTempo}`)
 
     if (parts.length === 0) {
       return 'e.g., dreamy lo-fi beat at 90 bpm'
     }
 
-    let prompt = parts.join(' ') + ' strudel pattern'
-
-    return prompt
+    return parts.join(' ')
   }
 
   useEffect(() => {
@@ -782,6 +747,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
     lastSubmittedPromptRef.current = textToSend
 
+    if (isAuthenticated && !chatId && !currentChatIdRef.current) {
+      void ensureChatCreated(textToSend)
+    }
+
     const currentCode = currentSnippets?.map(s => s.code).filter(Boolean).join('\n\n') || undefined
     sendMessage(
       { text: textToSend },
@@ -825,13 +794,16 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           <AlertTitle>Sign in required</AlertTitle>
           <AlertDescription className="flex items-center justify-between">
             <span>You've used all 3 free generations. Sign in to continue generating Strudel code.</span>
-            <Button size="sm" onClick={handleSignIn}>Sign In</Button>
+            <Button size="sm" onClick={handleSignIn} disabled={isSigningIn}>
+              {isSigningIn && <Icons.spinner className="animate-spin" />}
+              Sign In
+            </Button>
           </AlertDescription>
         </Alert>
       )}
       <ConversationWithFade className="flex-1 min-h-0">
         <Conversation className="flex-1 min-h-0">
-          <ConversationContent className="pt-8 gap-4">
+          <ConversationContent className="gap-4">
             {(() => {
               const messagesToRender = [...messages]
               if ((status === 'submitted' || status === 'streaming') && messagesToRender.length > 0 && messagesToRender[messagesToRender.length - 1].role !== 'assistant') {
@@ -881,7 +853,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                                 if (!isCodeStreamingNow) {
                                   const code = extractStrudelCode(fullText)
                                   if (code) {
-                                    onSnippetsGeneratedRef.current?.([{ code }])
+                                    pushSnippets([{ code }])
                                     onToolClickRef.current?.('generateStrudelCode', { snippets: [{ code }] })
                                   }
                                 }

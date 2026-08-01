@@ -254,7 +254,10 @@ export default function ExamplesCarousel() {
   const [mounted, setMounted] = useState(false)
   const editorRefs = useRef<(StrudelEditorElement | null)[]>([])
   const playingEditorRef = useRef<StrudelEditorElement | null>(null)
+  const playingIndexRef = useRef<number | null>(null)
   const { resolvedTheme } = useTheme()
+
+  playingIndexRef.current = playingIndex
 
   useEffect(() => setMounted(true), [])
 
@@ -262,6 +265,7 @@ export default function ExamplesCarousel() {
     const stopPlayback = () => {
       playingEditorRef.current?.editor?.stop?.()
       playingEditorRef.current = null
+      playingIndexRef.current = null
       setPlayingIndex(null)
     }
     window.addEventListener('blur', stopPlayback)
@@ -381,16 +385,23 @@ ${tokenRules}
   }, [isEditorReady, resolvedTheme])
 
   const handleTogglePlay = async (index: number) => {
-    if (playingIndex !== null) {
-      const prev = editorRefs.current[playingIndex]
-      prev?.editor?.stop?.()
-      playingEditorRef.current = null
-      if (prev?.editor?.setCode) prev.editor.setCode(EXAMPLES[playingIndex].fullCode)
-    }
+    const current = playingIndexRef.current
 
-    if (playingIndex === index) {
+    if (current === index) {
+      const repl = editorRefs.current[index]
+      repl?.editor?.stop?.()
+      playingEditorRef.current = null
+      repl?.editor?.setCode?.(EXAMPLES[index].fullCode)
+      playingIndexRef.current = null
       setPlayingIndex(null)
       return
+    }
+
+    if (current !== null) {
+      const prev = editorRefs.current[current]
+      prev?.editor?.stop?.()
+      playingEditorRef.current = null
+      prev?.editor?.setCode?.(EXAMPLES[current].fullCode)
     }
 
     const repl = editorRefs.current[index]
@@ -403,6 +414,7 @@ ${tokenRules}
       }
       repl.editor.start?.()
       playingEditorRef.current = repl
+      playingIndexRef.current = index
       setPlayingIndex(index)
     } catch (error) {
       console.error('Failed to start Strudel playback:', error)
@@ -437,7 +449,10 @@ ${tokenRules}
                         'h-8 w-8 rounded-full shrink-0 transition-colors',
                         playingIndex === i && 'bg-primary text-primary-foreground hover:bg-primary/90',
                       )}
-                      onClick={() => handleTogglePlay(i)}
+                      onPointerDown={(event) => {
+                        event.preventDefault()
+                        void handleTogglePlay(i)
+                      }}
                       disabled={!isEditorReady}
                     >
                       {playingIndex === i ? (

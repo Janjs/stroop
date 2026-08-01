@@ -104,10 +104,10 @@ RESPONSE FORMAT — follow this order strictly for EVERY response that includes 
 2. THEN output the Strudel code in a single fenced code block with the language tag "strudel":
 
 \`\`\`strudel
-s("bd sd").fast(2)
+s("bd sd").fast(2).cpm(120)
 \`\`\`
 
-The code must be valid Strudel code, playable as-is. Output a single Strudel expression (no variable assignments, no play(), no loop, no comments). Use Strudel built-ins like s(), note(), stack(), fast(), slow(), gain(), lpf(), hpf(), room(), size(), pan(); do not use synth or any undefined globals.
+The code must be valid Strudel code, playable as-is. Output a single Strudel expression (no variable assignments, no play(), no loop, no comments). Use Strudel built-ins like s(), note(), stack(), fast(), slow(), gain(), lpf(), hpf(), room(), size(), pan(); do not use synth or any undefined globals. Always end every pattern with .cpm(n), choosing a tempo that fits the style (e.g. .cpm(120) for house, .cpm(140) for techno).
 
 3. AFTER the code block, explain what was created and how the Strudel code is structured.
 

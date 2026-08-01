@@ -30,6 +30,10 @@ export default function Header() {
 
   const displayPrompt = isSharePage ? null : chat?.title || title || prompt || (isGeneratePage ? 'Welcome to Stroop' : null)
 
+  if (isGeneratePage && isAuthenticated) {
+    return null
+  }
+
   return (
     <header className="flex-shrink-0 relative">
       <nav className="flex gap-4 items-center px-4 py-3 min-h-[3.5rem]" aria-label="Global">
@@ -47,9 +51,11 @@ export default function Header() {
             <h2 className="text-lg text-ellipsis overflow-hidden whitespace-nowrap max-w-[55vw] md:max-w-[22rem] font-outfit">{`${displayPrompt}`}</h2>
           ) : null}
         </div>
-        <div className="flex gap-3 ml-auto items-center">
-          <AuthButton />
-        </div>
+        {!isAuthenticated ? (
+          <div className="flex gap-3 ml-auto items-center">
+            <AuthButton />
+          </div>
+        ) : null}
       </nav>
     </header>
   )

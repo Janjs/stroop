@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Check, Copy, MessageSquare, Minus, Pause, Play, Plus, Share2 } from 'lucide-react'
 import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
+import { setStrudelEditorCode } from '@/lib/strudel-editor-code'
 import { useTheme } from 'next-themes'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
@@ -65,6 +66,9 @@ const getOffsetFromLineColumn = (code: string, line: number, column: number) => 
   return Math.min(offset + Math.max(column, 0), code.length)
 }
 
+const BUFFER_LINES = 10
+const LINE_HEIGHT_RATIO = 1.5
+
 const getErrorRange = (error: unknown, code: string) => {
   if (!code || typeof error !== 'object' || error === null) return null
   const err = error as {
@@ -112,13 +116,14 @@ const getErrorRange = (error: unknown, code: string) => {
 const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = false, onCompileError, onFixInChat, resetKey, chatId, shareTitle }: StrudelCodeViewerProps) => {
   const activeSnippet = snippets[0]
   const hasSnippet = Boolean(activeSnippet?.code?.trim())
-  const [isCleared, setIsCleared] = useState(false)
-  const lastResetKeyRef = useRef<string | null | undefined>(undefined)
   const replRef = useRef<StrudelEditorElement | null>(null)
   const sharePreviewRef = useRef<StrudelEditorElement | null>(null)
   const [isEditorReady, setIsEditorReady] = useState(false)
+  const [isEditorInitialized, setIsEditorInitialized] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isSharePlaying, setIsSharePlaying] = useState(false)
+  const isSharePlayingRef = useRef(false)
+  isSharePlayingRef.current = isSharePlaying
   const [isSharePreviewReady, setIsSharePreviewReady] = useState(false)
   const [hasCopied, setHasCopied] = useState(false)
   const [isShareOpen, setIsShareOpen] = useState(false)
@@ -134,6 +139,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   const activeCodeRef = useRef(activeSnippet?.code)
   activeCodeRef.current = activeSnippet?.code
   const lastSetNormalizedCodeRef = useRef<string>('')
+  const lastEvaluatedCodeRef = useRef<string>('')
   const currentEditorCodeRef = useRef(activeSnippet?.code || '')
   const makeShareable = useMutation(api.chats.makeShareable)
   const anonymousSessionId = useAnonymousSession()
@@ -217,6 +223,8 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
       const secondary = get('--secondary')
       const accentColor = get('--accent')
       const ringColor = get('--ring')
+      const lineHeightPx = fontSize * LINE_HEIGHT_RATIO
+      const contentBufferPx = BUFFER_LINES * lineHeightPx
       const pastel = (color: string) => isDark
         ? `color-mix(in oklab, ${color} 40%, ${fg})`
         : `color-mix(in oklab, ${color} 70%, ${fg})`
@@ -254,7 +262,7 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
 #strudel-repl-container .cm-editor,#strudel-repl-container .cm-scroller,#strudel-repl-container .cm-content,#strudel-repl-container .cm-line{font-family:${fontMono};font-weight:500;font-size:${fontSize}px;}
 #strudel-repl-container .cm-editor{background-color:${bg} !important;color:${fg} !important;border-radius:${radius};height:100%;}
 #strudel-repl-container .cm-scroller{background-color:${bg} !important;}
-#strudel-repl-container .cm-content{color:${fg} !important;}
+#strudel-repl-container .cm-content{box-sizing:border-box;color:${fg} !important;min-height:100%;padding-bottom:${contentBufferPx}px !important;}
 #strudel-repl-container .cm-gutters{background-color:${isDark ? muted : bg} !important;border-color:${border};min-height:100%;}
 #strudel-repl-container .cm-gutterElement{min-width:3ch;text-align:right;}
 #strudel-repl-container .cm-activeLineGutter{background-color:${accent} !important;color:${isDark ? accentFg : fg} !important;}
@@ -274,15 +282,21 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
 ${tokenRules}
 `
       document.head.appendChild(styleEl)
+      setIsEditorInitialized(true)
     }
     const raf = window.requestAnimationFrame(() => apply())
     const late = window.setTimeout(() => apply(), 300)
     return () => {
       window.cancelAnimationFrame(raf)
       window.clearTimeout(late)
-      document.getElementById('strudel-app-theme')?.remove()
     }
   }, [isEditorReady, resolvedTheme, fontSize])
+
+  useEffect(() => {
+    return () => {
+      document.getElementById('strudel-app-theme')?.remove()
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -296,35 +310,36 @@ ${tokenRules}
     const repl = replRef.current
     if (!repl) return
     if (!activeSnippet?.code) {
-      if (repl.editor?.setCode) {
-        repl.editor.setCode('')
-        repl.editor.stop?.()
-      } else {
-        repl.setAttribute('code', '')
-        repl.editor?.stop?.()
-      }
+      setStrudelEditorCode(repl, '', { resetHistory: true })
+      repl.editor?.stop?.()
       setIsPlaying(false)
       setReplError(null)
+      lastSetNormalizedCodeRef.current = ''
+      lastEvaluatedCodeRef.current = ''
       return
     }
     const normalizedCode = normalizeStrudelCode(activeSnippet.code)
-    lastSetNormalizedCodeRef.current = normalizedCode
-    currentEditorCodeRef.current = normalizedCode
-    if (repl.editor?.setCode) {
-      repl.editor.setCode(normalizedCode)
-    } else {
-      repl.setAttribute('code', normalizedCode)
+    const codeChanged = normalizedCode !== lastSetNormalizedCodeRef.current
+
+    if (codeChanged) {
+      lastSetNormalizedCodeRef.current = normalizedCode
+      currentEditorCodeRef.current = normalizedCode
+      setStrudelEditorCode(repl, normalizedCode)
+
+      window.requestAnimationFrame(() => {
+        const scroller = repl.shadowRoot?.querySelector('.cm-scroller')
+        if (scroller instanceof HTMLElement) {
+          scroller.scrollTop = scroller.scrollHeight
+        }
+      })
     }
 
     if (isCodeStreaming) return
 
+    if (!codeChanged && normalizedCode === lastEvaluatedCodeRef.current) return
+
     setReplError(null)
-    window.requestAnimationFrame(() => {
-      const scroller = repl.shadowRoot?.querySelector('.cm-scroller')
-      if (scroller instanceof HTMLElement) {
-        scroller.scrollTop = scroller.scrollHeight
-      }
-    })
+    lastEvaluatedCodeRef.current = normalizedCode
     window.requestAnimationFrame(() => {
       if (!normalizedCode.trim()) return
       if (!repl.editor) return
@@ -350,29 +365,13 @@ ${tokenRules}
   useEffect(() => {
     const repl = replRef.current
     if (!repl) return
-    if (repl.editor?.setCode) {
-      repl.editor.setCode('')
-      repl.editor.stop?.()
-    } else {
-      repl.setAttribute('code', '')
-      repl.editor?.stop?.()
-    }
+    setStrudelEditorCode(repl, '', { resetHistory: true })
+    repl.editor?.stop?.()
     setIsPlaying(false)
     setReplError(null)
+    lastSetNormalizedCodeRef.current = ''
+    lastEvaluatedCodeRef.current = ''
   }, [resetKey])
-
-  useEffect(() => {
-    if (resetKey !== lastResetKeyRef.current) {
-      lastResetKeyRef.current = resetKey
-      setIsCleared(true)
-    }
-  }, [resetKey])
-
-  useEffect(() => {
-    if (hasSnippet) {
-      setIsCleared(false)
-    }
-  }, [hasSnippet, activeSnippet?.code])
 
   useEffect(() => {
     setReplError(null)
@@ -460,8 +459,9 @@ ${tokenRules}
   const handleToggleSharePlayback = async () => {
     const editor = sharePreviewRef.current?.editor
     if (!editor) return
-    if (isSharePlaying) {
+    if (isSharePlayingRef.current) {
       editor.stop?.()
+      isSharePlayingRef.current = false
       setIsSharePlaying(false)
       return
     }
@@ -469,6 +469,7 @@ ${tokenRules}
       const result = editor.evaluate?.()
       if (result && typeof (result as Promise<unknown>).then === 'function') await result
       editor.start?.()
+      isSharePlayingRef.current = true
       setIsSharePlaying(true)
     } catch (error) {
       console.error('Failed to play shared Strudel preview:', error)
@@ -518,59 +519,59 @@ ${tokenRules}
   return (
     <Card className="h-full flex flex-col overflow-hidden border-border bg-white shadow-md dark:bg-input/30 dark:shadow-xs">
       <CardContent className="flex-1 min-h-0 flex flex-col bg-white p-0 dark:bg-transparent">
-        {!hasSnippet || isCleared ? (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            {isLoading ? 'Waiting for code...' : 'Your Strudel code will appear here.'}
-          </div>
-        ) : (
-          <>
-            <div className="relative flex-1 min-h-0">
-              {createElement('strudel-editor', { ref: replRef, className: 'w-full flex-none h-0 min-h-0 overflow-hidden' })}
-              {replError ? (
-                <div className="absolute top-2 right-2 z-10 max-w-xs">
-                  <Alert variant="destructive" className="py-2 px-3 bg-background">
-                    <AlertTitle className="text-xs font-bold">Strudel syntax error</AlertTitle>
-                    <AlertDescription className="text-xs break-all line-clamp-3">{replError.message}</AlertDescription>
-                    {onFixInChat && activeSnippet?.code && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2 h-6 text-xs gap-1"
-                        onClick={() => onFixInChat(replError.message, activeSnippet.code)}
-                      >
-                        <MessageSquare className="h-3 w-3" />
-                        Fix in chat
-                      </Button>
-                    )}
-                  </Alert>
-                </div>
-              ) : null}
-              <div className="absolute inset-x-3 bottom-3 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-full bg-background" onClick={handleCopy} aria-label="Copy code" disabled={!activeSnippet?.code}>
-                    {hasCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                  <Button variant="outline" size="icon" className="h-9 w-9 rounded-full bg-background" onClick={openSharePreview} aria-label="Share output" disabled={!activeSnippet?.code}>
-                    <Share2 className="h-4 w-4" />
-                  </Button>
-                </div>
-                <Button className="h-11 min-w-28 rounded-full bg-primary px-5 shadow-sm" onClick={handleTogglePlayback} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isEditorReady || Boolean(replError)}>
-                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                  {isPlaying ? 'Pause' : 'Play'}
-                </Button>
-                <div className="ml-auto flex items-center gap-1 rounded-full border bg-background p-0.5">
-                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setFontSize((s) => Math.max(10, s - 1))} aria-label="Decrease font size">
-                    <Minus className="h-3 w-3" />
-                  </Button>
-                  <span className="text-xs tabular-nums w-6 text-center select-none">{fontSize}</span>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setFontSize((s) => Math.min(24, s + 1))} aria-label="Increase font size">
-                    <Plus className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
+        <div
+          className="strudel-main-editor relative flex-1 min-h-0"
+          data-editor-initialized={isEditorInitialized}
+        >
+          {createElement('strudel-editor', { ref: replRef, className: 'w-full flex-none h-0 min-h-0 overflow-hidden' })}
+          {isLoading ? (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background/60 text-sm text-muted-foreground">
+              Waiting for code...
             </div>
-          </>
-        )}
+          ) : null}
+          {replError ? (
+            <div className="absolute top-2 right-2 z-10 max-w-xs">
+              <Alert variant="destructive" className="py-2 px-3 bg-background">
+                <AlertTitle className="text-xs font-bold">Strudel syntax error</AlertTitle>
+                <AlertDescription className="text-xs break-all line-clamp-3">{replError.message}</AlertDescription>
+                {onFixInChat && activeSnippet?.code && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-6 text-xs gap-1"
+                    onClick={() => onFixInChat(replError.message, activeSnippet.code)}
+                  >
+                    <MessageSquare className="h-3 w-3" />
+                    Fix in chat
+                  </Button>
+                )}
+              </Alert>
+            </div>
+          ) : null}
+          <div className="absolute inset-x-4 bottom-4 z-10 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" className="h-9 w-9 rounded-full bg-background" onClick={handleCopy} aria-label="Copy code" disabled={!hasSnippet}>
+                {hasCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </Button>
+              <Button variant="outline" size="icon" className="h-9 w-9 rounded-full bg-background" onClick={openSharePreview} aria-label="Share output" disabled={!hasSnippet}>
+                <Share2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <Button className="h-11 min-w-28 shrink-0 rounded-full bg-primary px-5 shadow-sm" onClick={handleTogglePlayback} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isEditorReady || Boolean(replError)}>
+              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              {isPlaying ? 'Pause' : 'Play'}
+            </Button>
+            <div className="flex items-center gap-1 rounded-full border bg-background p-0.5">
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setFontSize((s) => Math.max(10, s - 1))} aria-label="Decrease font size">
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="text-xs tabular-nums w-6 text-center select-none">{fontSize}</span>
+              <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setFontSize((s) => Math.min(24, s + 1))} aria-label="Increase font size">
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        </div>
       </CardContent>
       <Dialog open={isShareOpen} onOpenChange={setIsShareOpen}>
         <DialogContent className="max-w-lg rounded-3xl p-6">
@@ -590,7 +591,10 @@ ${tokenRules}
                 variant="outline"
                 size="icon"
                 className={`h-9 w-9 shrink-0 rounded-full ${isSharePlaying ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
-                onClick={handleToggleSharePlayback}
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  void handleToggleSharePlayback()
+                }}
                 disabled={!isSharePreviewReady}
                 aria-label={isSharePlaying ? 'Pause preview' : 'Play preview'}
               >
