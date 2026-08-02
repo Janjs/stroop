@@ -138,11 +138,10 @@ export async function POST(req: Request) {
       selectionContext?: SelectionContext
     } = await req.json()
 
-    const [strudelGuide, strudelExamples, strudelSounds, strudelApiReference] = await Promise.all([
+    const [strudelGuide, strudelExamples, strudelSounds] = await Promise.all([
       getStrudelGuide(),
       getStrudelExamples(),
       getStrudelSounds(),
-      //getStrudelApiReference(), this is too long and not needed for now
     ])
     const resolvedCurrentCode = currentCode ?? getPreviousGenerationFromMessages(messages)
     const currentCodeContext = resolvedCurrentCode
@@ -158,9 +157,6 @@ Strudel guide:
 ${strudelGuide}
 
 ${strudelExamples}
-
-API reference (all available Strudel functions):
-${strudelApiReference}
 
 Available default sounds (only use names from this catalog):
 ${strudelSounds}${currentCodeContext}${selectionContextBlock}${repairContextBlock}
