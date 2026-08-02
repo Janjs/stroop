@@ -24,3 +24,5 @@ temp/
 
 .DS_Store
 Thumbs.db
+
+docs/strudel-doc.json

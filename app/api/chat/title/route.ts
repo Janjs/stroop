@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     const { prompt }: { prompt: string } = await req.json()
 
     if (!prompt?.trim()) {
-      return Response.json({ title: 'New Chat' })
+      return Response.json({ title: 'New chat' })
     }
 
     const { text } = await generateText({
@@ -18,10 +18,10 @@ export async function POST(req: Request) {
 Prompt: ${prompt.trim()}`,
     })
 
-    const title = text.trim().replace(/^["']|["']$/g, '') || 'New Chat'
+    const title = text.trim().replace(/^["']|["']$/g, '') || 'New chat'
     return Response.json({ title })
   } catch (error) {
     console.error('Title generation error:', error)
-    return Response.json({ title: 'New Chat' })
+    return Response.json({ title: 'New chat' })
   }
 }

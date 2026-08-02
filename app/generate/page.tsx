@@ -19,11 +19,13 @@ import {
 import { useConvexAuth, useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
+import { DEFAULT_CHAT_TITLE } from '@/lib/chat-title'
 
 export const dynamic = 'force-dynamic'
 
 const GenerateContent = () => {
   const [snippets, setSnippets] = useState<StrudelSnippet[]>([])
+  const [isCodeStreaming, setIsCodeStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [compileError, setCompileError] = useState<{ message: string; code: string; id: number } | null>(null)
   const [fixRequest, setFixRequest] = useState<{ message: string; code: string; id: number } | null>(null)
@@ -44,14 +46,14 @@ const GenerateContent = () => {
     chatId && isAuthenticated ? { id: chatId as Id<'chats'> } : 'skip'
   )
   const isChatLoading = Boolean(chatId && isAuthenticated && chat === undefined)
-  const displayTitle = chat?.title || title || prompt || 'Welcome to Stroop'
+  const displayTitle = chat?.title || title || prompt || DEFAULT_CHAT_TITLE
 
   const prevChatIdRef = useRef<string | undefined>(undefined)
   const createdChatIdRef = useRef<string | undefined>(undefined)
   const prevNewParamRef = useRef<string | null>(null)
   const hasInitializedRef = useRef(false)
   const newParam = searchParams.get('new')
-  const viewerKey = newParam ?? 'none'
+  const viewerKey = chatId ?? newParam ?? 'none'
 
   useEffect(() => {
     if (hasInitializedRef.current) {
@@ -60,6 +62,7 @@ const GenerateContent = () => {
       const isReset = newParam && newParam !== prevNewParamRef.current
       if (isChatChange || isReset) {
         setSnippets([])
+        setIsCodeStreaming(false)
         setError(null)
         setCompileError(null)
         setFixRequest(null)
@@ -74,11 +77,13 @@ const GenerateContent = () => {
     createdChatIdRef.current = undefined
   }, [chatId, newParam])
 
-  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { fromChatLoad?: boolean }) => {
+  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean }) => {
     const fromChatLoad = options?.fromChatLoad ?? false
+    const streaming = options?.streaming ?? false
+    setIsCodeStreaming(streaming)
     setSnippets((prev) => {
       const next = newSnippets.slice(-1)
-      if (prev[0]?.code === next[0]?.code) return prev
+      if (!streaming && prev[0]?.code === next[0]?.code) return prev
       return next
     })
     setError(null)
@@ -134,6 +139,7 @@ const GenerateContent = () => {
       ref={editorRef}
       key={viewerKey}
       snippets={snippets}
+      isCodeStreaming={isCodeStreaming}
       isLoading={isChatLoading || (snippets.length === 0 && !!prompt && !error)}
       onCompileError={handleCompileError}
       onFixInChat={handleFixInChat}

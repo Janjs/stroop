@@ -137,7 +137,7 @@ function UserMenu({
 }
 
 export function AuthButton({ variant = 'header' }: AuthButtonProps) {
-  const { isAuthenticated, isLoading } = useConvexAuth()
+  const { isAuthenticated } = useConvexAuth()
   const { signOut } = useAuthActions()
   const { theme, setTheme } = useTheme()
   const pathname = usePathname()
@@ -156,10 +156,6 @@ export function AuthButton({ variant = 'header' }: AuthButtonProps) {
     if (pathname.startsWith('/generate')) {
       router.push('/')
     }
-  }
-
-  if (isLoading) {
-    return null
   }
 
   if (isAuthenticated) {
@@ -218,10 +214,6 @@ export function AuthButton({ variant = 'header' }: AuthButtonProps) {
         </SidebarMenu>
       </SidebarFooter>
     )
-  }
-
-  if (variant === 'sidebar') {
-    return null
   }
 
   return (

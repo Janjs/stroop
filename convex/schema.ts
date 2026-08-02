@@ -36,6 +36,7 @@ export default defineSchema({
     sharedAt: v.optional(v.number()),
     sharedBy: v.optional(v.string()),
     sharedCode: v.optional(v.string()),
+    pinned: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

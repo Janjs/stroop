@@ -139,6 +139,7 @@ export const update = mutation({
       )
     ),
     snippets: v.optional(v.any()),
+    pinned: v.optional(v.boolean()),
     sessionId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -155,6 +156,7 @@ export const update = mutation({
     if (args.title !== undefined) updates.title = args.title;
     if (args.messages !== undefined) updates.messages = args.messages;
     if (args.snippets !== undefined) updates.snippets = args.snippets;
+    if (args.pinned !== undefined) updates.pinned = args.pinned;
 
     if (args.messages !== undefined || args.snippets !== undefined) {
       updates.updatedAt = Date.now();

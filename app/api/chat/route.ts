@@ -1,17 +1,15 @@
 import { streamText, convertToModelMessages, UIMessage, smoothStream } from 'ai'
 import { openai as openaiProvider } from '@ai-sdk/openai'
-import { createHash } from 'crypto'
-import { ConvexHttpClient } from 'convex/browser'
-import { api } from '@/convex/_generated/api'
 import { DEFAULT_OPENAI_MODEL } from '@/lib/models'
 import { readFile } from 'fs/promises'
 import path from 'path'
 
 export const maxDuration = 30
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 let strudelGuideCache: string | null = null
 let strudelExamplesCache: string | null = null
+let strudelSoundsCache: string | null = null
+let strudelApiReferenceCache: string | null = null
 
 function extractStrudelCodeFromText(text: string): string | null {
   const marker = '```strudel\n'
@@ -106,31 +104,22 @@ async function getStrudelExamples(): Promise<string> {
   return strudelExamplesCache
 }
 
-function generateCacheKey(
-  messages: UIMessage[],
-  model: string,
-  currentCode?: string,
-  repairContext?: RepairContext,
-  selectionContext?: SelectionContext,
-): string {
-  const normalized = messages.map((m) => ({
-    role: m.role,
-    parts: m.parts?.map((p: any) => {
-      if (p.type === 'text') return { type: 'text', text: p.text }
-      return p
-    }),
-  }))
-  const keyData = JSON.stringify({ messages: normalized, model, currentCode, repairContext, selectionContext })
-  return createHash('sha256').update(keyData).digest('hex')
+async function getStrudelSounds(): Promise<string> {
+  if (strudelSoundsCache) {
+    return strudelSoundsCache
+  }
+  const soundsPath = path.join(process.cwd(), 'docs', 'strudel-sounds.md')
+  strudelSoundsCache = await readFile(soundsPath, 'utf8')
+  return strudelSoundsCache
 }
 
-async function getCachedResponse(key: string): Promise<{ response: string; headers: Record<string, string> } | null> {
-  try {
-    return await convex.query(api.cache.getPromptCache, { cacheKey: key })
-  } catch (error) {
-    console.error('Error getting prompt cache:', error)
-    return null
+async function getStrudelApiReference(): Promise<string> {
+  if (strudelApiReferenceCache) {
+    return strudelApiReferenceCache
   }
+  const apiReferencePath = path.join(process.cwd(), 'docs', 'strudel-api-reference.md')
+  strudelApiReferenceCache = await readFile(apiReferencePath, 'utf8')
+  return strudelApiReferenceCache
 }
 
 export async function POST(req: Request) {
@@ -149,28 +138,12 @@ export async function POST(req: Request) {
       selectionContext?: SelectionContext
     } = await req.json()
 
-    const cacheKey = generateCacheKey(messages, model, currentCode, repairContext, selectionContext)
-    const cached = await getCachedResponse(cacheKey)
-
-    if (cached) {
-      console.log('Cache HIT for prompt request:', { cacheKey, model, messageCount: messages.length })
-      const encoder = new TextEncoder()
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(encoder.encode(cached.response))
-          controller.close()
-        },
-      })
-
-      return new Response(stream, {
-        headers: {
-          ...cached.headers,
-          'X-Cache': 'HIT',
-        },
-      })
-    }
-
-    const [strudelGuide, strudelExamples] = await Promise.all([getStrudelGuide(), getStrudelExamples()])
+    const [strudelGuide, strudelExamples, strudelSounds, strudelApiReference] = await Promise.all([
+      getStrudelGuide(),
+      getStrudelExamples(),
+      getStrudelSounds(),
+      //getStrudelApiReference(), this is too long and not needed for now
+    ])
     const resolvedCurrentCode = currentCode ?? getPreviousGenerationFromMessages(messages)
     const currentCodeContext = resolvedCurrentCode
       ? `\n\nThe user has Strudel code loaded in their editor. When they send a follow-up message, update this existing code incrementally — do not rewrite from scratch unless they ask for something completely new. Preserve parts they did not ask to change.\n\`\`\`strudel\n${resolvedCurrentCode}\n\`\`\``
@@ -184,7 +157,15 @@ Study the examples carefully to understand the style, structure, and patterns of
 Strudel guide:
 ${strudelGuide}
 
-${strudelExamples}${currentCodeContext}${selectionContextBlock}${repairContextBlock}
+${strudelExamples}
+
+API reference (all available Strudel functions):
+${strudelApiReference}
+
+Available default sounds (only use names from this catalog):
+${strudelSounds}${currentCodeContext}${selectionContextBlock}${repairContextBlock}
+
+For informational questions that do not require generating music (e.g. "what synths can you use?", "how does fast() work?"), answer conversationally in plain text. Do not include a Strudel code block unless the user asks you to generate or modify music.
 
 RESPONSE FORMAT — follow this order strictly for EVERY response that includes code:
 
@@ -195,7 +176,7 @@ RESPONSE FORMAT — follow this order strictly for EVERY response that includes 
 s("bd sd").fast(2).cpm(120)
 \`\`\`
 
-The code must be valid Strudel code, playable as-is. Output a single Strudel expression (no variable assignments, no play(), no loop, no comments). Use Strudel built-ins like s(), note(), stack(), fast(), slow(), gain(), lpf(), hpf(), room(), size(), pan(); do not use synth or any undefined globals. Always end every pattern with .cpm(n), choosing a tempo that fits the style (e.g. .cpm(120) for house, .cpm(140) for techno).
+The code must be valid Strudel code, playable as-is. Output a single Strudel expression (no variable assignments, no play(), no loop, no comments). Use Strudel built-ins like s(), note(), stack(), fast(), slow(), gain(), lpf(), hpf(), room(), size(), pan(); pick sound names from the catalog above; do not use synth or any undefined globals. Always end every pattern with .cpm(n), choosing a tempo that fits the style (e.g. .cpm(120) for house, .cpm(140) for techno).
 
 3. AFTER the code block, explain what was created and how the Strudel code is structured.
 

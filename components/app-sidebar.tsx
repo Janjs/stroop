@@ -10,6 +10,8 @@ import { Id } from '@/convex/_generated/dataModel'
 import { Icons } from '@/components/icons'
 import { AuthButton } from '@/components/auth/auth-button'
 import { SidebarChatItem } from '@/components/sidebar-chat-item'
+import { useSignIn } from '@/hooks/useSignIn'
+import { Button } from '@/components/ui/button'
 import {
   Sidebar,
   SidebarContent,
@@ -35,6 +37,7 @@ export function AppSidebar() {
   const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar()
   const isCollapsed = state === 'collapsed'
   const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth()
+  const { handleSignIn, isSigningIn } = useSignIn()
 
   const { results: chats, status, loadMore } = usePaginatedQuery(
     api.chats.list,
@@ -46,6 +49,18 @@ export function AppSidebar() {
   const [animatingChatIds, setAnimatingChatIds] = useState<Set<string>>(new Set())
 
   const currentChatId = searchParams.get('chatId')
+
+  const favouriteChats = chats
+    ? [...chats]
+        .filter((chat) => chat.pinned)
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+    : []
+
+  const regularChats = chats
+    ? [...chats]
+        .filter((chat) => !chat.pinned)
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+    : []
 
   useEffect(() => {
     if (!chats) return
@@ -75,11 +90,11 @@ export function AppSidebar() {
     return () => window.clearTimeout(timeoutId)
   }, [chats])
 
-  if (!isAuthenticated && !isAuthLoading) {
+  if (isAuthLoading && !pathname.startsWith('/generate')) {
     return null
   }
 
-  if (isAuthLoading && !pathname.startsWith('/generate')) {
+  if (!isAuthenticated && pathname === '/') {
     return null
   }
 
@@ -101,6 +116,24 @@ export function AppSidebar() {
       }
     }
   }
+
+  const renderChatItems = (chatList: NonNullable<typeof chats>) => (
+    <SidebarMenu>
+      {chatList.map((chat) => (
+        <SidebarChatItem
+          key={chat._id}
+          chatId={chat._id}
+          title={chat.title}
+          href={`/generate?chatId=${chat._id}&title=${encodeURIComponent(chat.title)}`}
+          isActive={currentChatId === chat._id}
+          isPinned={chat.pinned ?? false}
+          isAnimating={animatingChatIds.has(chat._id)}
+          onDelete={() => handleDeleteChat(chat._id)}
+          onNavigate={() => isMobile && setOpenMobile(false)}
+        />
+      ))}
+    </SidebarMenu>
+  )
 
   return (
     <Sidebar collapsible="icon">
@@ -153,35 +186,40 @@ export function AppSidebar() {
 
       {isAuthenticated && (isMobile || !isCollapsed) && (
         <SidebarContent>
+          {favouriteChats.length > 0 && (
+            <SidebarGroup>
+              <SidebarGroupLabel>Favourites</SidebarGroupLabel>
+              <SidebarGroupContent>
+                {renderChatItems(favouriteChats)}
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
           <SidebarGroup>
             <SidebarGroupLabel>Chats</SidebarGroupLabel>
             <SidebarGroupContent>
-              {chats && chats.length > 0 ? (
-                <SidebarMenu>
-                  {chats.map((chat) => (
-                    <SidebarChatItem
-                      key={chat._id}
-                      chatId={chat._id}
-                      title={chat.title}
-                      href={`/generate?chatId=${chat._id}&title=${encodeURIComponent(chat.title)}`}
-                      isActive={currentChatId === chat._id}
-                      isAnimating={animatingChatIds.has(chat._id)}
-                      isMobile={isMobile}
-                      onDelete={() => handleDeleteChat(chat._id)}
-                      onNavigate={() => isMobile && setOpenMobile(false)}
-                    />
-                  ))}
-                </SidebarMenu>
-              ) : null}
+              {regularChats.length > 0 ? renderChatItems(regularChats) : null}
             </SidebarGroupContent>
           </SidebarGroup>
-          {isAuthenticated && status === 'CanLoadMore' && (
+          {status === 'CanLoadMore' && (
             <div className="p-4 flex justify-center">
               <SidebarMenuButton onClick={() => loadMore(20)} className='justify-center text-muted-foreground'>
                 Load More
               </SidebarMenuButton>
             </div>
           )}
+        </SidebarContent>
+      )}
+      {!isAuthenticated && (isMobile || !isCollapsed) && (
+        <SidebarContent className="flex flex-1 items-center justify-center">
+          <div className="flex flex-col items-center gap-3 px-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              If you want to store your chat history, sign in to pick up where you left off.
+            </p>
+            <Button onClick={handleSignIn} disabled={isSigningIn} size="sm">
+              {isSigningIn && <Icons.spinner className="animate-spin" />}
+              Sign In
+            </Button>
+          </div>
         </SidebarContent>
       )}
       {isAuthenticated && <AuthButton variant="sidebar" />}

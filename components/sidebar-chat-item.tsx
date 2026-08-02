@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { MoreVerticalIcon, PencilIcon, Trash2Icon } from 'lucide-react'
+import { HeartIcon, MoreVerticalIcon, PencilIcon, Trash2Icon } from 'lucide-react'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
@@ -34,8 +34,8 @@ interface SidebarChatItemProps {
   title: string
   href: string
   isActive: boolean
+  isPinned?: boolean
   isAnimating?: boolean
-  isMobile?: boolean
   onDelete: () => void | Promise<void>
   onNavigate?: () => void
 }
@@ -45,8 +45,8 @@ export function SidebarChatItem({
   title,
   href,
   isActive,
+  isPinned = false,
   isAnimating = false,
-  isMobile = false,
   onDelete,
   onNavigate,
 }: SidebarChatItemProps) {
@@ -62,10 +62,18 @@ export function SidebarChatItem({
   }
 
   const handleSaveTitle = async () => {
-    const nextTitle = editTitle.trim() || 'New Chat'
+    const nextTitle = editTitle.trim() || 'New chat'
     await updateChat({ id: chatId, title: nextTitle })
     setIsEditOpen(false)
   }
+
+  const handleTogglePin = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    await updateChat({ id: chatId, pinned: !isPinned })
+  }
+
+  const showActions = isHovered || isMenuOpen
 
   return (
     <>
@@ -82,8 +90,7 @@ export function SidebarChatItem({
           className={cn(
             'duration-200 [&>a>span]:truncate-none',
             'group-has-[[data-sidebar=menu-action]]/menu-item:!pr-2',
-            (isHovered || isMenuOpen || isMobile) &&
-              'group-has-[[data-sidebar=menu-action]]/menu-item:!pr-6'
+            showActions && 'group-has-[[data-sidebar=menu-action]]/menu-item:!pr-12'
           )}
         >
           <Link href={href} onClick={onNavigate} className="block min-w-0 w-full">
@@ -91,10 +98,18 @@ export function SidebarChatItem({
           </Link>
         </SidebarMenuButton>
 
+        <SidebarMenuAction
+          className={cn('right-6', showActions ? 'opacity-100' : 'opacity-0')}
+          onClick={(e) => void handleTogglePin(e)}
+        >
+          <HeartIcon className={cn('size-4', isPinned && 'fill-current')} />
+          <span className="sr-only">{isPinned ? 'Unfavourite chat' : 'Favourite chat'}</span>
+        </SidebarMenuAction>
+
         <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
           <DropdownMenuTrigger asChild>
             <SidebarMenuAction
-              showOnHover
+              className={showActions ? 'opacity-100' : 'opacity-0'}
               onClick={(e) => e.preventDefault()}
             >
               <MoreVerticalIcon className="size-4" />

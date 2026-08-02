@@ -40,6 +40,7 @@ export type StrudelCodeViewerHandle = {
 
 interface StrudelCodeViewerProps {
   snippets: StrudelSnippet[]
+  isCodeStreaming?: boolean
   isLoading?: boolean
   onCompileError?: (message: string, code: string) => void
   onFixInChat?: (message: string, code: string) => void
@@ -120,7 +121,7 @@ const getErrorRange = (error: unknown, code: string) => {
 }
 
 const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerProps>(function StrudelCodeViewer(
-  { snippets, isLoading = false, onCompileError, onFixInChat, onAddSelectionToContext, resetKey, chatId, shareTitle },
+  { snippets, isCodeStreaming = false, isLoading = false, onCompileError, onFixInChat, onAddSelectionToContext, resetKey, chatId, shareTitle },
   ref,
 ) {
   const activeSnippet = snippets[0]
@@ -366,6 +367,8 @@ ${tokenRules}
       }
     }
 
+    if (isCodeStreaming) return
+
     if (!codeChanged && normalizedCode === lastEvaluatedCodeRef.current) return
 
     setReplError(null)
@@ -380,7 +383,7 @@ ${tokenRules}
         }
       })
     })
-  }, [activeSnippet?.code, isEditorReady])
+  }, [activeSnippet?.code, isEditorReady, isCodeStreaming])
 
   useEffect(() => {
     const repl = replRef.current
@@ -596,7 +599,7 @@ ${tokenRules}
                 <Share2 className="h-4 w-4" />
               </Button>
             </div>
-            <Button className="h-11 min-w-28 shrink-0 rounded-full bg-primary px-5 shadow-sm" onClick={handleTogglePlayback} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isEditorReady || Boolean(replError)}>
+            <Button className="h-11 min-w-28 shrink-0 rounded-full bg-primary px-5 shadow-sm" onClick={handleTogglePlayback} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isEditorReady || Boolean(replError) || isCodeStreaming}>
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               {isPlaying ? 'Pause' : 'Play'}
             </Button>
