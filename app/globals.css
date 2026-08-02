@@ -371,6 +371,33 @@ strudel-editor + div .cm-scroller {
   background-color: var(--background) !important;
 }
 
+strudel-editor + div .cm-scroller:not(.is-scrolling):not(:hover) {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+strudel-editor + div .cm-scroller:not(.is-scrolling):not(:hover)::-webkit-scrollbar {
+  display: none;
+}
+
+strudel-editor + div .cm-scroller.is-scrolling,
+strudel-editor + div .cm-scroller:hover {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent) transparent;
+}
+
+strudel-editor + div .cm-scroller.is-scrolling::-webkit-scrollbar,
+strudel-editor + div .cm-scroller:hover::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+strudel-editor + div .cm-scroller.is-scrolling::-webkit-scrollbar-thumb,
+strudel-editor + div .cm-scroller:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
+  border-radius: 9999px;
+}
+
 strudel-editor + div .cm-content {
   color: var(--foreground) !important;
 }

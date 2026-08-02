@@ -173,6 +173,29 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
   }, [isEditorReady, isEditorInitialized])
 
   useEffect(() => {
+    if (!isEditorInitialized) return
+    const scroller = (replRef.current?.nextElementSibling as HTMLElement | null)?.querySelector('.cm-scroller') as HTMLElement | null
+    if (!scroller) return
+
+    let timeoutId: number | null = null
+    const handleScroll = () => {
+      scroller.classList.add('is-scrolling')
+      if (timeoutId !== null) window.clearTimeout(timeoutId)
+      timeoutId = window.setTimeout(() => {
+        scroller.classList.remove('is-scrolling')
+        timeoutId = null
+      }, 800)
+    }
+
+    scroller.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      scroller.removeEventListener('scroll', handleScroll)
+      if (timeoutId !== null) window.clearTimeout(timeoutId)
+      scroller.classList.remove('is-scrolling')
+    }
+  }, [isEditorInitialized])
+
+  useEffect(() => {
     if (!isEditorReady) return
     setSelectionUI((current) => {
       if (!current) return current
@@ -299,6 +322,11 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
 #strudel-repl-container .cm-editor,#strudel-repl-container .cm-scroller,#strudel-repl-container .cm-content,#strudel-repl-container .cm-line{font-family:${fontMono};font-weight:500;font-size:${fontSize}px;}
 #strudel-repl-container .cm-editor{background-color:${bg} !important;color:${fg} !important;border-radius:${radius};height:100%;}
 #strudel-repl-container .cm-scroller{background-color:${bg} !important;}
+#strudel-repl-container .cm-scroller:not(.is-scrolling):not(:hover){scrollbar-width:none;-ms-overflow-style:none;}
+#strudel-repl-container .cm-scroller:not(.is-scrolling):not(:hover)::-webkit-scrollbar{display:none;}
+#strudel-repl-container .cm-scroller.is-scrolling,#strudel-repl-container .cm-scroller:hover{scrollbar-width:thin;scrollbar-color:color-mix(in oklab, ${mutedFg} 35%, transparent) transparent;}
+#strudel-repl-container .cm-scroller.is-scrolling::-webkit-scrollbar,#strudel-repl-container .cm-scroller:hover::-webkit-scrollbar{width:6px;height:6px;}
+#strudel-repl-container .cm-scroller.is-scrolling::-webkit-scrollbar-thumb,#strudel-repl-container .cm-scroller:hover::-webkit-scrollbar-thumb{background-color:color-mix(in oklab, ${mutedFg} 35%, transparent);border-radius:9999px;}
 #strudel-repl-container .cm-content{box-sizing:border-box;color:${fg} !important;min-height:100%;padding-bottom:${contentBufferPx}px !important;}
 #strudel-repl-container .cm-gutters{background-color:${isDark ? muted : bg} !important;border-color:${border};min-height:100%;}
 #strudel-repl-container .cm-gutterElement{min-width:3ch;text-align:right;}
