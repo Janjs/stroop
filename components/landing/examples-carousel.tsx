@@ -328,11 +328,11 @@ export default function ExamplesCarousel() {
       const get = (v: string) => root.getPropertyValue(v).trim() || 'inherit'
       const fg = get('--foreground')
       const fontMono = get('--font-mono') || 'monospace'
-      const primary = get('--primary')
-      const accent = get('--accent')
+      const primary = get('--editor-primary')
+      const accent = get('--editor-accent')
       const secondary = get('--secondary')
       const mutedFg = get('--muted-foreground')
-      const ring = get('--ring')
+      const ring = get('--editor-ring')
       const isDark = resolvedTheme === 'dark'
       const pastel = (color: string) =>
         isDark ? `color-mix(in oklab, ${color} 40%, ${fg})` : `color-mix(in oklab, ${color} 70%, ${fg})`

@@ -81,11 +81,11 @@ function SharedStroop() {
     const get = (value: string) => root.getPropertyValue(value).trim() || 'inherit'
     const isDark = resolvedTheme === 'dark'
     const fg = isDark ? get('--foreground') : get('--popover-foreground')
-    const primary = get('--primary')
+    const primary = get('--editor-primary')
     const mutedFg = get('--muted-foreground')
     const secondary = get('--secondary')
-    const accent = get('--accent')
-    const ring = get('--ring')
+    const accent = get('--editor-accent')
+    const ring = get('--editor-ring')
     const pastel = (color: string) => isDark
       ? `color-mix(in oklab, ${color} 40%, ${fg})`
       : `color-mix(in oklab, ${color} 70%, ${fg})`
