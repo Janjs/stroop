@@ -284,6 +284,10 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
         tokenRules += `.strudel-share-preview .cm-editor .${cls}{color:${color} !important;}`
         idx += 1
       })
+      const noteHighlightColor = accentFg
+      const noteHighlightBg = isDark
+        ? `color-mix(in oklab, ${accentFg} 22%, transparent)`
+        : `color-mix(in oklab, ${accentFg} 14%, transparent)`
       const id = 'strudel-app-theme'
       let styleEl = document.getElementById(id) as HTMLStyleElement | null
       if (!styleEl) {
@@ -301,10 +305,11 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
 #strudel-repl-container .cm-activeLineGutter{background-color:color-mix(in oklab, ${accent} 35%, transparent) !important;color:${isDark ? accentFg : fg} !important;}
 #strudel-repl-container .cm-activeLine{background-color:${isDark ? muted : bg} !important;}
 #strudel-repl-container .cm-selectionMatch,#strudel-repl-container .cm-selectionBackground{background-color:color-mix(in oklab, ${accent} 18%, transparent) !important;}
-#strudel-repl-container .cm-content span[style*="outline"]{outline:1px solid color-mix(in oklab, ${primary} 28%, transparent) !important;background-color:color-mix(in oklab, ${primary} 7%, transparent) !important;border-radius:2px;}
+#strudel-repl-container .cm-content span[style*="outline"]{outline:1px solid ${noteHighlightColor} !important;background-color:${noteHighlightBg} !important;border-radius:2px;}
 #strudel-repl-container .cm-editor.cm-focused{outline-color:${ring};}
 #strudel-repl-container .cm-cursor{border-left-color:${fg};}
 #strudel-repl-container .cm-editor .cm-flash{background-color:color-mix(in oklab, ${primary} 20%, transparent) !important;outline:1px solid color-mix(in oklab, ${primary} 55%, transparent);border-radius:2px;}
+.strudel-share-preview .cm-content span[style*="outline"]{outline:1px solid ${noteHighlightColor} !important;background-color:${noteHighlightBg} !important;border-radius:2px;}
 .strudel-share-preview .cm-editor,.strudel-share-preview .cm-scroller,.strudel-share-preview .cm-content,.strudel-share-preview .cm-line{font-family:${fontMono};font-weight:500;font-size:11px;}
 .strudel-share-preview .cm-editor{background-color:transparent !important;color:${fg} !important;height:100%;}
 .strudel-share-preview .cm-scroller{background-color:transparent !important;overflow:auto !important;}

@@ -296,12 +296,11 @@ export async function playStrudelEditor(
   if (!mirror) return lastEvaluatedCode
 
   const currentCode = getStrudelEditorCode(repl) || mirror.code || ''
-  if (
-    lastEvaluatedCode !== undefined &&
-    currentCode === lastEvaluatedCode &&
-    mirror.repl?.start
-  ) {
-    mirror.repl.start()
+  const isResume = lastEvaluatedCode !== undefined && currentCode === lastEvaluatedCode
+
+  if (isResume) {
+    await mirror.evaluate?.(false)
+    mirror.repl?.start?.()
     return lastEvaluatedCode
   }
 
