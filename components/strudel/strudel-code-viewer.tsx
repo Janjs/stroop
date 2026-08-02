@@ -307,6 +307,9 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
         tokenRules += `.strudel-share-preview .cm-editor .${cls}{color:${color} !important;}`
         idx += 1
       })
+      const selectionBg = isDark
+        ? `color-mix(in oklab, ${accent} 18%, transparent)`
+        : `color-mix(in oklab, ${primary} 25%, transparent)`
       const noteHighlightColor = accentFg
       const noteHighlightBg = isDark
         ? `color-mix(in oklab, ${accentFg} 22%, transparent)`
@@ -332,7 +335,7 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
 #strudel-repl-container .cm-gutterElement{min-width:3ch;text-align:right;}
 #strudel-repl-container .cm-activeLineGutter{background-color:color-mix(in oklab, ${accent} 35%, transparent) !important;color:${isDark ? accentFg : fg} !important;}
 #strudel-repl-container .cm-activeLine{background-color:${isDark ? muted : bg} !important;}
-#strudel-repl-container .cm-selectionMatch,#strudel-repl-container .cm-selectionBackground{background-color:color-mix(in oklab, ${accent} 18%, transparent) !important;}
+#strudel-repl-container .cm-selectionMatch,#strudel-repl-container .cm-selectionBackground{background-color:${selectionBg} !important;}
 #strudel-repl-container .cm-content span[style*="outline"]{outline:1px solid ${noteHighlightColor} !important;background-color:${noteHighlightBg} !important;border-radius:2px;}
 #strudel-repl-container .cm-editor.cm-focused{outline-color:${ring};}
 #strudel-repl-container .cm-cursor{border-left-color:${fg};}
