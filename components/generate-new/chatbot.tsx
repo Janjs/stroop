@@ -3,7 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
-import { StrudelSnippet } from '@/types/types'
+import { StrudelSnippet, EditorContext, EditorSelectionContext } from '@/types/types'
 import { useQuery, useMutation, useConvexAuth } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { useSignIn } from '@/hooks/useSignIn'
@@ -314,7 +314,7 @@ function ConversationWithFade({ children, className, onViewportReady }: { childr
 interface ChatbotProps {
   prompt?: string
   chatId?: string
-  onSnippetsGenerated?: (snippets: StrudelSnippet[], options?: { isStreaming?: boolean; fromChatLoad?: boolean }) => void
+  onSnippetsGenerated?: (snippets: StrudelSnippet[], options?: { fromChatLoad?: boolean }) => void
   onToolError?: (message: string) => void
   onChatCreated?: (chatId: string) => void
   compileError?: { message: string; code: string; id: number } | null
@@ -322,9 +322,12 @@ interface ChatbotProps {
   resetKey?: string | null
   onToolClick?: (toolName: string, output: any) => void
   currentSnippets?: StrudelSnippet[]
+  getEditorContext?: () => EditorContext
+  selectionContext?: EditorSelectionContext | null
+  onClearSelection?: () => void
 }
 
-function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, fixRequest, resetKey, onToolClick, currentSnippets }: ChatbotProps) {
+function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection }: ChatbotProps) {
   const [selectedMood, setSelectedMood] = useState<string | null>(null)
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
@@ -342,10 +345,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const lastCompileErrorCodeRef = useRef<string | null>(null)
   const lastSnippetScopeKeyRef = useRef<string | null>(null)
 
-  const lastStreamedCodeRef = useRef<string | null>(null)
   const lastPushedCodeRef = useRef<string | null>(null)
-  const wasStreamingSnippetsRef = useRef(false)
-  const codeUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isLoadingChatRef = useRef(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(false)
@@ -360,21 +360,12 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const onToolClickRef = useRef(onToolClick)
   onToolClickRef.current = onToolClick
 
-  const pushSnippets = useCallback((snippets: StrudelSnippet[], options?: { isStreaming?: boolean; fromChatLoad?: boolean }) => {
+  const pushSnippets = useCallback((snippets: StrudelSnippet[], options?: { fromChatLoad?: boolean }) => {
     const code = snippets[0]?.code?.trim()
     if (!code) return
-    const isStreaming = options?.isStreaming ?? false
-
-    if (!options?.fromChatLoad && code === lastPushedCodeRef.current) {
-      if (wasStreamingSnippetsRef.current && !isStreaming) {
-        wasStreamingSnippetsRef.current = false
-        onSnippetsGeneratedRef.current?.(snippets, options)
-      }
-      return
-    }
+    if (!options?.fromChatLoad && code === lastPushedCodeRef.current) return
 
     lastPushedCodeRef.current = code
-    wasStreamingSnippetsRef.current = isStreaming
     onSnippetsGeneratedRef.current?.(snippets, options)
   }, [])
 
@@ -426,22 +417,33 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const { textInput } = usePromptInputController()
   const [, setPrompt] = useGenerateSearchParams()
 
-  const chatRequestContextRef = useRef({ currentSnippets: undefined as StrudelSnippet[] | undefined })
+  const chatRequestContextRef = useRef({
+    currentSnippets: undefined as StrudelSnippet[] | undefined,
+    getEditorContext: undefined as (() => EditorContext) | undefined,
+  })
   chatRequestContextRef.current.currentSnippets = currentSnippets
+  chatRequestContextRef.current.getEditorContext = getEditorContext
 
   const chatTransport = useMemo(
     () =>
       new DefaultChatTransport({
         api: '/api/chat',
-        prepareSendMessagesRequest: ({ messages, body }) => ({
-          body: {
-            ...body,
-            currentCode:
-              (body as { currentCode?: string })?.currentCode ??
-              getPreviousGenerationCode(messages, chatRequestContextRef.current.currentSnippets),
-            messages: stripStrudelCodeFromMessages(messages),
-          },
-        }),
+        prepareSendMessagesRequest: ({ messages, body }) => {
+          const editorContext = chatRequestContextRef.current.getEditorContext?.()
+          const currentCode =
+            editorContext?.code ||
+            (body as { currentCode?: string })?.currentCode ||
+            getPreviousGenerationCode(messages, chatRequestContextRef.current.currentSnippets)
+
+          return {
+            body: {
+              ...body,
+              currentCode,
+              selectionContext: editorContext?.selection,
+              messages: stripStrudelCodeFromMessages(messages),
+            },
+          }
+        },
       }),
     [],
   )
@@ -490,37 +492,6 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       }
     }
   }, [messages, chatId, resetKey, status, pushSnippets])
-
-  useEffect(() => {
-    if (status !== 'streaming') {
-      if (codeUpdateTimerRef.current) {
-        clearTimeout(codeUpdateTimerRef.current)
-        codeUpdateTimerRef.current = null
-      }
-      if (lastStreamedCodeRef.current) {
-        pushSnippets([{ code: lastStreamedCodeRef.current }])
-        lastStreamedCodeRef.current = null
-      }
-      return
-    }
-
-    const lastMessage = messages[messages.length - 1]
-    if (!lastMessage || lastMessage.role !== 'assistant') return
-
-    const code = extractCodeFromMessage(lastMessage)
-    if (!code || code === lastStreamedCodeRef.current) return
-
-    lastStreamedCodeRef.current = code
-
-    if (!codeUpdateTimerRef.current) {
-      codeUpdateTimerRef.current = setTimeout(() => {
-        codeUpdateTimerRef.current = null
-        if (lastStreamedCodeRef.current) {
-          pushSnippets([{ code: lastStreamedCodeRef.current }], { isStreaming: true })
-        }
-      }, 80)
-    }
-  }, [messages, status, pushSnippets])
 
   // Load existing chat
   useEffect(() => {
@@ -661,7 +632,6 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       setError(null)
       setIsSuggestionsOpen(true)
       lastPushedCodeRef.current = null
-      wasStreamingSnippetsRef.current = false
       onSnippetsGeneratedRef.current?.([])
       currentChatIdRef.current = null
       lastSnippetScopeKeyRef.current = null
@@ -832,6 +802,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       { text: textToSend },
       { body: { model: DEFAULT_OPENAI_MODEL } }
     )
+
+    onClearSelection?.()
 
     setSelectedMood(null)
     setSelectedGenre(null)
@@ -1163,6 +1135,26 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       </Collapsible>
 
       <PromptInput onSubmit={handleSubmit}>
+        {selectionContext && (
+          <PromptInputHeader className="px-3 pt-3">
+            <div className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-muted-foreground">Selected code</p>
+                <p className="mt-1 line-clamp-2 font-mono text-xs">{selectionContext.text}</p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-6 shrink-0"
+                onClick={onClearSelection}
+                aria-label="Clear selection context"
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </div>
+          </PromptInputHeader>
+        )}
         <PromptInputBody>
           <PromptInputTextarea placeholder={defaultPrompt} />
         </PromptInputBody>
@@ -1185,7 +1177,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   )
 }
 
-export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, fixRequest, resetKey, onToolClick, currentSnippets }: ChatbotProps) {
+export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection }: ChatbotProps) {
   return (
     <PromptInputProvider>
       <ChatbotContent
@@ -1199,6 +1191,9 @@ export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolErr
         resetKey={resetKey}
         onToolClick={onToolClick}
         currentSnippets={currentSnippets}
+        getEditorContext={getEditorContext}
+        selectionContext={selectionContext}
+        onClearSelection={onClearSelection}
       />
     </PromptInputProvider>
   )

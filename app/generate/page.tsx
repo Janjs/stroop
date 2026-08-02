@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { StrudelSnippet } from '@/types/types'
+import { EditorSelectionContext, StrudelSnippet } from '@/types/types'
 import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Icons } from '@/components/icons'
 import Chatbot from '@/components/generate-new/chatbot'
@@ -9,7 +9,7 @@ import { ChatTitleLabel } from '@/components/chat-title-label'
 import { useSearchParams } from 'next/navigation'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { useIsMobile } from '@/hooks/use-mobile'
-import StrudelCodeViewer from '@/components/strudel/strudel-code-viewer'
+import StrudelCodeViewer, { type StrudelCodeViewerHandle } from '@/components/strudel/strudel-code-viewer'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import {
   ResizableHandle,
@@ -27,7 +27,8 @@ const GenerateContent = () => {
   const [error, setError] = useState<string | null>(null)
   const [compileError, setCompileError] = useState<{ message: string; code: string; id: number } | null>(null)
   const [fixRequest, setFixRequest] = useState<{ message: string; code: string; id: number } | null>(null)
-  const [isCodeStreaming, setIsCodeStreaming] = useState(false)
+  const [selectionContext, setSelectionContext] = useState<EditorSelectionContext | null>(null)
+  const editorRef = useRef<StrudelCodeViewerHandle>(null)
   const searchParams = useSearchParams()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -62,6 +63,7 @@ const GenerateContent = () => {
         setError(null)
         setCompileError(null)
         setFixRequest(null)
+        setSelectionContext(null)
       }
     } else {
       hasInitializedRef.current = true
@@ -72,23 +74,18 @@ const GenerateContent = () => {
     createdChatIdRef.current = undefined
   }, [chatId, newParam])
 
-  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { isStreaming?: boolean; fromChatLoad?: boolean }) => {
-    const isStreaming = options?.isStreaming ?? false
+  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { fromChatLoad?: boolean }) => {
     const fromChatLoad = options?.fromChatLoad ?? false
     setSnippets((prev) => {
       const next = newSnippets.slice(-1)
       if (prev[0]?.code === next[0]?.code) return prev
       return next
     })
-    setIsCodeStreaming(isStreaming)
     setError(null)
-    
-    if (!isStreaming) {
-      userDismissedDrawerRef.current = false
-      setCompileError(null)
-      setFixRequest(null)
-    }
-    
+    userDismissedDrawerRef.current = false
+    setCompileError(null)
+    setFixRequest(null)
+
     if (isMobile && !fromChatLoad && newSnippets.some((snippet) => Boolean(snippet.code?.trim()))) {
       if (!userDismissedDrawerRef.current) {
         setIsDrawerOpen(true)
@@ -108,6 +105,19 @@ const GenerateContent = () => {
     setFixRequest({ message, code, id: Date.now() })
   }, [])
 
+  const getEditorContext = useCallback(() => ({
+    code: editorRef.current?.getCurrentCode() ?? snippets[0]?.code ?? '',
+    selection: selectionContext ?? undefined,
+  }), [snippets, selectionContext])
+
+  const handleAddSelectionToContext = useCallback((selection: EditorSelectionContext) => {
+    setSelectionContext(selection)
+  }, [])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectionContext(null)
+  }, [])
+
   const handleToolClick = useCallback((_toolName: string, output: unknown) => {
     if (output && typeof output === 'object' && 'snippets' in (output as any)) {
       const snippets = (output as { snippets?: StrudelSnippet[] }).snippets
@@ -121,12 +131,13 @@ const GenerateContent = () => {
 
   const codeViewer = (
     <StrudelCodeViewer
+      ref={editorRef}
       key={viewerKey}
       snippets={snippets}
       isLoading={isChatLoading || (snippets.length === 0 && !!prompt && !error)}
-      isCodeStreaming={isCodeStreaming}
       onCompileError={handleCompileError}
       onFixInChat={handleFixInChat}
+      onAddSelectionToContext={handleAddSelectionToContext}
       resetKey={searchParams.get('new')}
       chatId={chatId}
       shareTitle={searchParams.get('title') || prompt}
@@ -162,6 +173,9 @@ const GenerateContent = () => {
         resetKey={searchParams.get('new')}
         onToolClick={handleToolClick}
         currentSnippets={snippets}
+        getEditorContext={getEditorContext}
+        selectionContext={selectionContext}
+        onClearSelection={handleClearSelection}
       />
     </>
   )

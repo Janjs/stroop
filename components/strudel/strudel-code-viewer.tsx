@@ -1,14 +1,25 @@
 'use client'
 
-import { createElement, useCallback, useEffect, useRef, useState } from 'react'
-import { StrudelSnippet } from '@/types/types'
+import { createElement, forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { EditorSelectionContext, StrudelSnippet } from '@/types/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Check, Copy, MessageSquare, Minus, Pause, Play, Plus, Share2 } from 'lucide-react'
 import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
-import { configureStrudelEditor, evaluateStrudelEditor, playStrudelEditor, setStrudelEditorCode, type StrudelEditorElement } from '@/lib/strudel-editor-code'
-import { useStrudelSelectionEditor } from '@/components/strudel/strudel-selection-editor'
+import {
+  configureStrudelEditor,
+  evaluateStrudelEditor,
+  getStrudelEditorCode,
+  getStrudelEditorSelection,
+  getStrudelEditorSelectionUI,
+  playStrudelEditor,
+  setStrudelEditorCode,
+  subscribeStrudelEditorSelection,
+  updateStrudelEditorCode,
+  type EditorSelectionUI,
+  type StrudelEditorElement,
+} from '@/lib/strudel-editor-code'
 import { useTheme } from 'next-themes'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
@@ -22,12 +33,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
+export type StrudelCodeViewerHandle = {
+  getCurrentCode: () => string
+  getSelection: () => EditorSelectionContext | null
+}
+
 interface StrudelCodeViewerProps {
   snippets: StrudelSnippet[]
   isLoading?: boolean
-  isCodeStreaming?: boolean
   onCompileError?: (message: string, code: string) => void
   onFixInChat?: (message: string, code: string) => void
+  onAddSelectionToContext?: (selection: EditorSelectionContext) => void
   resetKey?: string | null
   chatId?: string
   shareTitle?: string
@@ -103,10 +119,14 @@ const getErrorRange = (error: unknown, code: string) => {
   return null
 }
 
-const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = false, onCompileError, onFixInChat, resetKey, chatId, shareTitle }: StrudelCodeViewerProps) => {
+const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerProps>(function StrudelCodeViewer(
+  { snippets, isLoading = false, onCompileError, onFixInChat, onAddSelectionToContext, resetKey, chatId, shareTitle },
+  ref,
+) {
   const activeSnippet = snippets[0]
   const hasSnippet = Boolean(activeSnippet?.code?.trim())
   const replRef = useRef<StrudelEditorElement | null>(null)
+  const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const sharePreviewRef = useRef<StrudelEditorElement | null>(null)
   const [isEditorReady, setIsEditorReady] = useState(false)
   const [isEditorInitialized, setIsEditorInitialized] = useState(false)
@@ -124,8 +144,11 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   const lastErrorKeyRef = useRef<string | null>(null)
   const lastCompileErrorKeyRef = useRef<string | null>(null)
   const [fontSize, setFontSize] = useState(14)
+  const [selectionUI, setSelectionUI] = useState<EditorSelectionUI | null>(null)
   const onCompileErrorRef = useRef(onCompileError)
   onCompileErrorRef.current = onCompileError
+  const onAddSelectionToContextRef = useRef(onAddSelectionToContext)
+  onAddSelectionToContextRef.current = onAddSelectionToContext
   const activeCodeRef = useRef(activeSnippet?.code)
   activeCodeRef.current = activeSnippet?.code
   const lastSetNormalizedCodeRef = useRef<string>('')
@@ -134,32 +157,27 @@ const StrudelCodeViewer = ({ snippets, isLoading = false, isCodeStreaming = fals
   const makeShareable = useMutation(api.chats.makeShareable)
   const anonymousSessionId = useAnonymousSession()
 
-  const handleSelectionApplied = useCallback((code: string) => {
-    const normalizedCode = normalizeStrudelCode(code)
-    currentEditorCodeRef.current = normalizedCode
-    lastSetNormalizedCodeRef.current = normalizedCode
-    lastEvaluatedCodeRef.current = normalizedCode
-    setReplError(null)
-  }, [])
-
-  const { panel: selectionPanel, handlePointerUp, refreshSelection } = useStrudelSelectionEditor({
-    replRef,
-    isEditorReady,
-    onApplied: handleSelectionApplied,
-  })
-
-  useEffect(() => {
-    if (!isEditorReady) return
-    const container = replRef.current?.nextElementSibling
-    if (!(container instanceof HTMLElement)) return
-    const onKeyUp = () => window.requestAnimationFrame(refreshSelection)
-    container.addEventListener('keyup', onKeyUp)
-    return () => container.removeEventListener('keyup', onKeyUp)
-  }, [isEditorReady, refreshSelection])
+  useImperativeHandle(ref, () => ({
+    getCurrentCode: () => getCurrentEditorCode(),
+    getSelection: () => getStrudelEditorSelection(replRef.current),
+  }), [])
 
   useEffect(() => {
     void loadStrudelRepl()
   }, [])
+
+  useEffect(() => {
+    if (!isEditorReady || !isEditorInitialized) return
+    return subscribeStrudelEditorSelection(replRef.current, editorContainerRef.current, setSelectionUI)
+  }, [isEditorReady, isEditorInitialized])
+
+  useEffect(() => {
+    if (!isEditorReady) return
+    setSelectionUI((current) => {
+      if (!current) return current
+      return getStrudelEditorSelectionUI(replRef.current, editorContainerRef.current) ?? null
+    })
+  }, [fontSize, isEditorReady])
 
   useEffect(() => {
     if (!isShareOpen || !activeSnippet?.code) return
@@ -337,19 +355,16 @@ ${tokenRules}
     const codeChanged = normalizedCode !== lastSetNormalizedCodeRef.current
 
     if (codeChanged) {
+      const previousCode = lastSetNormalizedCodeRef.current
       lastSetNormalizedCodeRef.current = normalizedCode
       currentEditorCodeRef.current = normalizedCode
-      setStrudelEditorCode(repl, normalizedCode)
 
-      window.requestAnimationFrame(() => {
-        const scroller = repl.shadowRoot?.querySelector('.cm-scroller')
-        if (scroller instanceof HTMLElement) {
-          scroller.scrollTop = scroller.scrollHeight
-        }
-      })
+      if (previousCode) {
+        updateStrudelEditorCode(repl, normalizedCode, previousCode)
+      } else {
+        setStrudelEditorCode(repl, normalizedCode)
+      }
     }
-
-    if (isCodeStreaming) return
 
     if (!codeChanged && normalizedCode === lastEvaluatedCodeRef.current) return
 
@@ -365,7 +380,7 @@ ${tokenRules}
         }
       })
     })
-  }, [activeSnippet?.code, isEditorReady, isCodeStreaming])
+  }, [activeSnippet?.code, isEditorReady])
 
   useEffect(() => {
     const repl = replRef.current
@@ -476,15 +491,21 @@ ${tokenRules}
   }
 
   const getCurrentEditorCode = () => {
-    const lines = document.querySelectorAll('#strudel-repl-container .cm-line')
-    return lines.length
-      ? Array.from(lines, (line) => line.textContent || '').join('\n')
-      : currentEditorCodeRef.current || activeSnippet?.code || ''
+    const fromEditor = getStrudelEditorCode(replRef.current)
+    if (fromEditor) return fromEditor
+    return currentEditorCodeRef.current || activeSnippet?.code || ''
   }
 
   const openSharePreview = () => {
     currentEditorCodeRef.current = getCurrentEditorCode()
     setIsShareOpen(true)
+  }
+
+  const handleAddSelectionToContext = () => {
+    const selection = selectionUI?.selection ?? getStrudelEditorSelection(replRef.current)
+    if (selection) {
+      onAddSelectionToContextRef.current?.(selection)
+    }
   }
 
   const handleShare = async () => {
@@ -519,12 +540,29 @@ ${tokenRules}
     <Card className="h-full flex flex-col overflow-hidden border-border bg-white shadow-md dark:bg-input/30 dark:shadow-xs">
       <CardContent className="flex-1 min-h-0 flex flex-col bg-white p-0 dark:bg-transparent">
         <div
+          ref={editorContainerRef}
           className="strudel-main-editor relative flex-1 min-h-0"
           data-editor-initialized={isEditorInitialized}
-          onMouseUp={handlePointerUp}
         >
           {createElement('strudel-editor', { ref: replRef, className: 'w-full flex-none h-0 min-h-0 overflow-hidden' })}
-          {selectionPanel}
+          {selectionUI && onAddSelectionToContext && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="absolute z-20 h-7 cursor-pointer gap-1 rounded-md bg-background px-2 text-xs shadow-md hover:bg-muted hover:text-foreground"
+              style={{
+                top: selectionUI.anchor.top - 8,
+                left: selectionUI.anchor.left - 24,
+                transform: 'translate(-100%, -100%)',
+              }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={handleAddSelectionToContext}
+            >
+              <MessageSquare className="h-3 w-3" />
+              Edit in chat
+            </Button>
+          )}
           {isLoading ? (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background/60 text-sm text-muted-foreground">
               Waiting for code...
@@ -626,6 +664,6 @@ ${tokenRules}
       </Dialog>
     </Card>
   )
-}
+})
 
 export default StrudelCodeViewer

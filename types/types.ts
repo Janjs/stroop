@@ -3,6 +3,17 @@ export type StrudelSnippet = {
   code: string
 }
 
+export type EditorSelectionContext = {
+  from: number
+  to: number
+  text: string
+}
+
+export type EditorContext = {
+  code: string
+  selection?: EditorSelectionContext
+}
+
 export interface GenerateStrudelRequest {
   prompt: string
 }

@@ -49,6 +49,25 @@ type RepairContext = {
   maxAttempts?: number
 }
 
+type SelectionContext = {
+  from: number
+  to: number
+  text: string
+}
+
+function buildSelectionContextBlock(selection: SelectionContext): string {
+  return [
+    '\n\nThe user has selected a specific part of their code in the editor.',
+    'Apply their request ONLY to this selected region. Keep everything else in the code unchanged.',
+    'Return the complete updated Strudel code (not just the selection).',
+    '',
+    'Selected code:',
+    '```strudel',
+    selection.text,
+    '```',
+  ].join('\n')
+}
+
 function buildRepairContextBlock(repair: RepairContext): string {
   const lines = [
     '\n\nThe generated Strudel code needs to be fixed.',
@@ -92,6 +111,7 @@ function generateCacheKey(
   model: string,
   currentCode?: string,
   repairContext?: RepairContext,
+  selectionContext?: SelectionContext,
 ): string {
   const normalized = messages.map((m) => ({
     role: m.role,
@@ -100,7 +120,7 @@ function generateCacheKey(
       return p
     }),
   }))
-  const keyData = JSON.stringify({ messages: normalized, model, currentCode, repairContext })
+  const keyData = JSON.stringify({ messages: normalized, model, currentCode, repairContext, selectionContext })
   return createHash('sha256').update(keyData).digest('hex')
 }
 
@@ -120,14 +140,16 @@ export async function POST(req: Request) {
       model = DEFAULT_OPENAI_MODEL,
       currentCode,
       repairContext,
+      selectionContext,
     }: {
       messages: UIMessage[]
       model?: string
       currentCode?: string
       repairContext?: RepairContext
+      selectionContext?: SelectionContext
     } = await req.json()
 
-    const cacheKey = generateCacheKey(messages, model, currentCode, repairContext)
+    const cacheKey = generateCacheKey(messages, model, currentCode, repairContext, selectionContext)
     const cached = await getCachedResponse(cacheKey)
 
     if (cached) {
@@ -151,8 +173,9 @@ export async function POST(req: Request) {
     const [strudelGuide, strudelExamples] = await Promise.all([getStrudelGuide(), getStrudelExamples()])
     const resolvedCurrentCode = currentCode ?? getPreviousGenerationFromMessages(messages)
     const currentCodeContext = resolvedCurrentCode
-      ? `\n\nThe user has Strudel code loaded in their editor. When they ask to edit or modify it, use the code below as the base. Do not mention to the user that you received existing code — respond naturally to their request.\n\`\`\`strudel\n${resolvedCurrentCode}\n\`\`\``
+      ? `\n\nThe user has Strudel code loaded in their editor. When they send a follow-up message, update this existing code incrementally — do not rewrite from scratch unless they ask for something completely new. Preserve parts they did not ask to change.\n\`\`\`strudel\n${resolvedCurrentCode}\n\`\`\``
       : ''
+    const selectionContextBlock = selectionContext ? buildSelectionContextBlock(selectionContext) : ''
     const repairContextBlock = repairContext ? buildRepairContextBlock(repairContext) : ''
     const systemPrompt = `You are a helpful assistant that generates Strudel live-coding music patterns.
 Use the Strudel guide below as the source of truth for syntax and capabilities.
@@ -161,7 +184,7 @@ Study the examples carefully to understand the style, structure, and patterns of
 Strudel guide:
 ${strudelGuide}
 
-${strudelExamples}${currentCodeContext}${repairContextBlock}
+${strudelExamples}${currentCodeContext}${selectionContextBlock}${repairContextBlock}
 
 RESPONSE FORMAT — follow this order strictly for EVERY response that includes code:
 
