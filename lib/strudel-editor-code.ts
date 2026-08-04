@@ -12,6 +12,7 @@ type EditorViewLike = {
     side?: -1 | 1,
   ) => { left: number; right: number; top: number; bottom: number } | null
   scrollDOM?: HTMLElement
+  dom?: HTMLElement
   dispatch: (spec: {
     changes: { from: number; to: number; insert: string }
     annotations?: unknown[]
@@ -127,14 +128,14 @@ export type StrudelEditorElement = HTMLElement & {
 export function getStrudelEditorCode(repl: StrudelEditorElement | null | undefined): string {
   const mirror = repl?.editor
   if (!mirror) return ''
-  if (mirror.code) return mirror.code
   const view = mirror.editor
-  if (!view) return ''
-  const doc = view.state.doc
-  if (typeof doc.sliceString === 'function') {
-    return doc.sliceString(0, doc.length)
+  if (view) {
+    const doc = view.state.doc
+    if (typeof doc.sliceString === 'function') {
+      return doc.sliceString(0, doc.length)
+    }
   }
-  return ''
+  return mirror.code || ''
 }
 
 export function getStrudelEditorSelection(
@@ -161,6 +162,42 @@ export function getStrudelEditorSelectionAnchor(
   container: HTMLElement | null,
 ): SelectionAnchor | null {
   return getStrudelEditorSelectionUI(repl, container)?.anchor ?? null
+}
+
+export function subscribeStrudelEditorChanges(
+  repl: StrudelEditorElement | null | undefined,
+  container: HTMLElement | null,
+  onCodeChange: (code: string) => void,
+) {
+  if (!container) return () => {}
+
+  let frameId = 0
+  const notify = () => {
+    window.cancelAnimationFrame(frameId)
+    frameId = window.requestAnimationFrame(() => {
+      onCodeChange(getStrudelEditorCode(repl))
+    })
+  }
+
+  const editorSurface = getEditorSurface(container)
+  const targets = [editorSurface, container.querySelector('.cm-content'), container.querySelector('.cm-editor')].filter(
+    Boolean,
+  ) as HTMLElement[]
+
+  for (const target of targets) {
+    target.addEventListener('keyup', notify)
+    target.addEventListener('paste', notify)
+    target.addEventListener('cut', notify)
+  }
+
+  return () => {
+    window.cancelAnimationFrame(frameId)
+    for (const target of targets) {
+      target.removeEventListener('keyup', notify)
+      target.removeEventListener('paste', notify)
+      target.removeEventListener('cut', notify)
+    }
+  }
 }
 
 export function subscribeStrudelEditorSelection(

@@ -4,8 +4,11 @@ import { createElement, forwardRef, useEffect, useImperativeHandle, useRef, useS
 import { EditorSelectionContext, StrudelSnippet } from '@/types/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Kbd, KbdGroup } from '@/components/ui/kbd'
+import { LoadingButton, type LoadingButtonHandle } from '@/components/interior/loading-button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Check, Copy, MessageSquare, Minus, Pause, Play, Plus, Share2 } from 'lucide-react'
+import { Check, Copy, MessageSquare, Minus, Plus, Share2 } from 'lucide-react'
+import { MorphButton } from '@/components/interior/morph-button'
 import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
 import {
   configureStrudelEditor,
@@ -15,6 +18,7 @@ import {
   getStrudelEditorSelectionUI,
   playStrudelEditor,
   setStrudelEditorCode,
+  subscribeStrudelEditorChanges,
   subscribeStrudelEditorSelection,
   updateStrudelEditorCode,
   type EditorSelectionUI,
@@ -25,6 +29,7 @@ import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
 import { useAnonymousSession } from '@/hooks/useAnonymousSession'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -45,6 +50,7 @@ interface StrudelCodeViewerProps {
   onCompileError?: (message: string, code: string) => void
   onFixInChat?: (message: string, code: string) => void
   onAddSelectionToContext?: (selection: EditorSelectionContext) => void
+  onCodeSaved?: (code: string) => void
   resetKey?: string | null
   chatId?: string
   shareTitle?: string
@@ -121,7 +127,7 @@ const getErrorRange = (error: unknown, code: string) => {
 }
 
 const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerProps>(function StrudelCodeViewer(
-  { snippets, isCodeStreaming = false, isLoading = false, onCompileError, onFixInChat, onAddSelectionToContext, resetKey, chatId, shareTitle },
+  { snippets, isCodeStreaming = false, isLoading = false, onCompileError, onFixInChat, onAddSelectionToContext, onCodeSaved, resetKey, chatId, shareTitle },
   ref,
 ) {
   const activeSnippet = snippets[0]
@@ -132,15 +138,24 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
   const [isEditorReady, setIsEditorReady] = useState(false)
   const [isEditorInitialized, setIsEditorInitialized] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const isPlayingRef = useRef(false)
+  isPlayingRef.current = isPlaying
   const [isSharePlaying, setIsSharePlaying] = useState(false)
   const isSharePlayingRef = useRef(false)
   isSharePlayingRef.current = isSharePlaying
   const [isSharePreviewReady, setIsSharePreviewReady] = useState(false)
   const [hasCopied, setHasCopied] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [saveButtonVisible, setSaveButtonVisible] = useState(false)
   const [isShareOpen, setIsShareOpen] = useState(false)
   const [hasShared, setHasShared] = useState(false)
   const [replError, setReplError] = useState<{ message: string; range?: { from: number; to: number } } | null>(null)
   const copyTimeoutRef = useRef<number | null>(null)
+  const saveButtonRef = useRef<LoadingButtonHandle>(null)
+  const hasUnsavedChangesRef = useRef(false)
+  hasUnsavedChangesRef.current = hasUnsavedChanges
+  const liveEvaluationTimeoutRef = useRef<number | null>(null)
+  const isApplyingExternalCodeRef = useRef(false)
   const { resolvedTheme } = useTheme()
   const lastErrorKeyRef = useRef<string | null>(null)
   const lastCompileErrorKeyRef = useRef<string | null>(null)
@@ -154,8 +169,10 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
   activeCodeRef.current = activeSnippet?.code
   const lastSetNormalizedCodeRef = useRef<string>('')
   const lastEvaluatedCodeRef = useRef<string>('')
+  const lastSavedCodeRef = useRef(activeSnippet?.code || '')
   const currentEditorCodeRef = useRef(activeSnippet?.code || '')
   const makeShareable = useMutation(api.chats.makeShareable)
+  const updateChat = useMutation(api.chats.update)
   const anonymousSessionId = useAnonymousSession()
 
   useImperativeHandle(ref, () => ({
@@ -168,8 +185,43 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
   }, [])
 
   useEffect(() => {
+    if (hasUnsavedChanges) setSaveButtonVisible(true)
+  }, [hasUnsavedChanges])
+
+  useEffect(() => {
     if (!isEditorReady || !isEditorInitialized) return
     return subscribeStrudelEditorSelection(replRef.current, editorContainerRef.current, setSelectionUI)
+  }, [isEditorReady, isEditorInitialized])
+
+  useEffect(() => {
+    const container = editorContainerRef.current
+    if (!isEditorReady || !isEditorInitialized || !container) return
+
+    const handleEditorChange = (code: string) => {
+      if (isApplyingExternalCodeRef.current) return
+      currentEditorCodeRef.current = code
+      const isDirty = normalizeStrudelCode(code) !== normalizeStrudelCode(lastSavedCodeRef.current)
+      setHasUnsavedChanges(isDirty)
+      if (!isPlayingRef.current) return
+      if (liveEvaluationTimeoutRef.current !== null) {
+        window.clearTimeout(liveEvaluationTimeoutRef.current)
+      }
+      liveEvaluationTimeoutRef.current = window.setTimeout(async () => {
+        liveEvaluationTimeoutRef.current = null
+        const repl = replRef.current
+        const nextCode = getStrudelEditorCode(repl)
+        if (!repl?.editor || !nextCode.trim() || nextCode === lastEvaluatedCodeRef.current) return
+        try {
+          await evaluateStrudelEditor(repl, false)
+          currentEditorCodeRef.current = nextCode
+          lastEvaluatedCodeRef.current = nextCode
+        } catch (error) {
+          console.error('Failed to live evaluate Strudel code:', error)
+        }
+      }, 250)
+    }
+
+    return subscribeStrudelEditorChanges(replRef.current, container, handleEditorChange)
   }, [isEditorReady, isEditorInitialized])
 
   useEffect(() => {
@@ -378,28 +430,43 @@ ${tokenRules}
 
   useEffect(() => {
     const repl = replRef.current
-    if (!repl) return
+    if (!repl?.editor) return
     if (!activeSnippet?.code) {
+      isApplyingExternalCodeRef.current = true
       setStrudelEditorCode(repl, '', { resetHistory: true })
+      isApplyingExternalCodeRef.current = false
       repl.editor?.stop?.()
       setIsPlaying(false)
       setReplError(null)
       lastSetNormalizedCodeRef.current = ''
       lastEvaluatedCodeRef.current = ''
+      lastSavedCodeRef.current = ''
+      setHasUnsavedChanges(false)
       return
     }
     const normalizedCode = normalizeStrudelCode(activeSnippet.code)
+    const editorCode = normalizeStrudelCode(getStrudelEditorCode(repl) || currentEditorCodeRef.current)
     const codeChanged = normalizedCode !== lastSetNormalizedCodeRef.current
 
     if (codeChanged) {
-      const previousCode = lastSetNormalizedCodeRef.current
-      lastSetNormalizedCodeRef.current = normalizedCode
-      currentEditorCodeRef.current = normalizedCode
-
-      if (previousCode) {
-        updateStrudelEditorCode(repl, normalizedCode, previousCode)
+      if (editorCode === normalizedCode) {
+        lastSetNormalizedCodeRef.current = normalizedCode
+        currentEditorCodeRef.current = normalizedCode
+        lastSavedCodeRef.current = normalizedCode
+        setHasUnsavedChanges(false)
       } else {
-        setStrudelEditorCode(repl, normalizedCode)
+        const previousCode = lastSetNormalizedCodeRef.current
+        isApplyingExternalCodeRef.current = true
+        if (previousCode) {
+          updateStrudelEditorCode(repl, normalizedCode, previousCode)
+        } else {
+          setStrudelEditorCode(repl, normalizedCode)
+        }
+        isApplyingExternalCodeRef.current = false
+        lastSetNormalizedCodeRef.current = normalizedCode
+        currentEditorCodeRef.current = normalizedCode
+        lastSavedCodeRef.current = normalizedCode
+        setHasUnsavedChanges(false)
       }
     }
 
@@ -430,6 +497,8 @@ ${tokenRules}
     setReplError(null)
     lastSetNormalizedCodeRef.current = ''
     lastEvaluatedCodeRef.current = ''
+    lastSavedCodeRef.current = ''
+    setHasUnsavedChanges(false)
   }, [resetKey])
 
   useEffect(() => {
@@ -495,6 +564,54 @@ ${tokenRules}
     }
   }
 
+  const getCurrentEditorCode = () => {
+    const repl = replRef.current
+    if (repl?.editor) {
+      const fromEditor = getStrudelEditorCode(repl)
+      if (fromEditor.trim()) return fromEditor
+    }
+    return currentEditorCodeRef.current || activeSnippet?.code || ''
+  }
+
+  const handleSaveCode = async (): Promise<boolean> => {
+    if (!hasUnsavedChangesRef.current) return false
+
+    const repl = replRef.current
+    const code = getCurrentEditorCode()
+    const normalizedCode = normalizeStrudelCode(code)
+    if (!normalizedCode || normalizedCode === normalizeStrudelCode(lastSavedCodeRef.current)) return false
+    if (!chatId) {
+      throw new Error('Save the chat before saving code changes')
+    }
+
+    if (liveEvaluationTimeoutRef.current !== null) {
+      window.clearTimeout(liveEvaluationTimeoutRef.current)
+      liveEvaluationTimeoutRef.current = null
+    }
+    if (isPlayingRef.current) {
+      await evaluateStrudelEditor(repl, false)
+      lastEvaluatedCodeRef.current = normalizedCode
+    }
+    await updateChat({
+      id: chatId as Id<'chats'>,
+      snippets: [{ ...(activeSnippet ?? {}), code: normalizedCode }],
+      sessionId: anonymousSessionId ?? undefined,
+    })
+    currentEditorCodeRef.current = normalizedCode
+    lastSavedCodeRef.current = normalizedCode
+    setHasUnsavedChanges(false)
+    onCodeSaved?.(normalizedCode)
+    return true
+  }
+
+  const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!hasUnsavedChanges) return
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault()
+      saveButtonRef.current?.run()
+    }
+  }
+
   const handleCopy = async () => {
     if (!activeSnippet?.code) return
     try {
@@ -527,12 +644,6 @@ ${tokenRules}
     } catch (error) {
       console.error('Failed to play shared Strudel preview:', error)
     }
-  }
-
-  const getCurrentEditorCode = () => {
-    const fromEditor = getStrudelEditorCode(replRef.current)
-    if (fromEditor) return fromEditor
-    return currentEditorCodeRef.current || activeSnippet?.code || ''
   }
 
   const openSharePreview = () => {
@@ -582,8 +693,34 @@ ${tokenRules}
           ref={editorContainerRef}
           className="strudel-main-editor relative flex-1 min-h-0"
           data-editor-initialized={isEditorInitialized}
+          onKeyDownCapture={handleEditorKeyDown}
         >
           {createElement('strudel-editor', { ref: replRef, className: 'w-full flex-none h-0 min-h-0 overflow-hidden' })}
+          {saveButtonVisible ? (
+            <LoadingButton
+              ref={saveButtonRef}
+              className="absolute top-4 right-4 z-10 h-7 rounded-full px-2"
+              leading={
+                <KbdGroup>
+                  <Kbd className="h-4 min-w-4 px-0.5 text-[10px]">⌘</Kbd>
+                  <span className="text-[10px] text-muted-foreground">+</span>
+                  <Kbd className="h-4 min-w-4 px-0.5 text-[10px]">S</Kbd>
+                </KbdGroup>
+              }
+              onAction={handleSaveCode}
+              pendingLabel="Saving…"
+              successLabel="Saved"
+              errorLabel="Retry"
+              resetAfter={1000}
+              disabled={isCodeStreaming || !hasUnsavedChanges}
+              onError={(error) => console.error('Failed to save Strudel code:', error)}
+              onReset={() => {
+                if (!hasUnsavedChangesRef.current) setSaveButtonVisible(false)
+              }}
+            >
+              Save
+            </LoadingButton>
+          ) : null}
           {selectionUI && onAddSelectionToContext && (
             <Button
               type="button"
@@ -608,7 +745,7 @@ ${tokenRules}
             </div>
           ) : null}
           {replError ? (
-            <div className="absolute top-2 right-2 z-10 max-w-xs">
+            <div className="absolute top-16 right-4 z-10 max-w-xs">
               <Alert variant="destructive" className="py-2 px-3 bg-background">
                 <AlertTitle className="text-xs font-bold">Strudel syntax error</AlertTitle>
                 <AlertDescription className="text-xs break-all line-clamp-3">{replError.message}</AlertDescription>
@@ -635,10 +772,12 @@ ${tokenRules}
                 <Share2 className="h-4 w-4" />
               </Button>
             </div>
-            <Button className="h-11 min-w-28 shrink-0 rounded-full bg-primary px-5 shadow-sm" onClick={handleTogglePlayback} aria-label={isPlaying ? 'Pause' : 'Play'} disabled={!isEditorReady || Boolean(replError) || isCodeStreaming}>
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              {isPlaying ? 'Pause' : 'Play'}
-            </Button>
+            <MorphButton
+              active={isPlaying}
+              onToggle={() => void handleTogglePlayback()}
+              disabled={!isEditorReady || Boolean(replError) || isCodeStreaming}
+              className="h-11 shrink-0 px-5"
+            />
             <div className="flex items-center gap-1 rounded-full border bg-background p-0.5">
               <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setFontSize((s) => Math.max(10, s - 1))} aria-label="Decrease font size">
                 <Minus className="h-3 w-3" />
@@ -665,19 +804,19 @@ ${tokenRules}
                   {activeSnippet?.title && shareTitle ? shareTitle : 'A generated Strudel pattern made with Stroop.'}
                 </p>
               </div>
-              <Button
+              <MorphButton
+                active={isSharePlaying}
+                onToggle={() => void handleToggleSharePlayback()}
+                disabled={!isSharePreviewReady}
+                showLabel={false}
+                iconSize={14}
                 variant="outline"
                 size="icon"
-                className={`h-9 w-9 shrink-0 rounded-full ${isSharePlaying ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''}`}
-                onPointerDown={(event) => {
-                  event.preventDefault()
-                  void handleToggleSharePlayback()
-                }}
-                disabled={!isSharePreviewReady}
-                aria-label={isSharePlaying ? 'Pause preview' : 'Play preview'}
-              >
-                {isSharePlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="ml-0.5 h-3.5 w-3.5" />}
-              </Button>
+                className={cn(
+                  'h-9 w-9 shrink-0',
+                  isSharePlaying && 'bg-primary text-primary-foreground hover:bg-primary/90',
+                )}
+              />
             </div>
             <div className="strudel-share-preview mt-3 overflow-hidden rounded-md bg-muted/60">
               <div className="flex items-center gap-1.5 border-b border-border/40 px-3 py-1.5">

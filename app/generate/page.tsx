@@ -20,6 +20,7 @@ import { useConvexAuth, useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
 import { DEFAULT_CHAT_TITLE } from '@/lib/chat-title'
+import { useAnonymousSession } from '@/hooks/useAnonymousSession'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,11 +42,14 @@ const GenerateContent = () => {
   const chatId = searchParams.get('chatId') || undefined
   const title = searchParams.get('title') || undefined
   const { isAuthenticated } = useConvexAuth()
+  const anonymousSessionId = useAnonymousSession()
   const chat = useQuery(
     api.chats.get,
-    chatId && isAuthenticated ? { id: chatId as Id<'chats'> } : 'skip'
+    chatId && (isAuthenticated || anonymousSessionId)
+      ? { id: chatId as Id<'chats'>, sessionId: anonymousSessionId ?? undefined }
+      : 'skip',
   )
-  const isChatLoading = Boolean(chatId && isAuthenticated && chat === undefined)
+  const isChatLoading = Boolean(chatId && (isAuthenticated || anonymousSessionId) && chat === undefined)
   const displayTitle = chat?.title || title || prompt || DEFAULT_CHAT_TITLE
 
   const prevChatIdRef = useRef<string | undefined>(undefined)
@@ -54,6 +58,11 @@ const GenerateContent = () => {
   const hasInitializedRef = useRef(false)
   const newParam = searchParams.get('new')
   const viewerKey = chatId ?? newParam ?? 'none'
+  const hydratedChatSnippetsRef = useRef(false)
+
+  useEffect(() => {
+    hydratedChatSnippetsRef.current = false
+  }, [chatId])
 
   useEffect(() => {
     if (hasInitializedRef.current) {
@@ -76,6 +85,15 @@ const GenerateContent = () => {
     prevNewParamRef.current = newParam
     createdChatIdRef.current = undefined
   }, [chatId, newParam])
+
+  useEffect(() => {
+    if (!chatId || !chat?.snippets?.length || isCodeStreaming) return
+    if (hydratedChatSnippetsRef.current) return
+    const next = chat.snippets.slice(-1)
+    if (!next[0]?.code?.trim()) return
+    hydratedChatSnippetsRef.current = true
+    setSnippets(next)
+  }, [chatId, chat?.snippets, isCodeStreaming])
 
   const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean }) => {
     const fromChatLoad = options?.fromChatLoad ?? false
@@ -119,6 +137,13 @@ const GenerateContent = () => {
     setSelectionContext(selection)
   }, [])
 
+  const handleCodeSaved = useCallback((code: string) => {
+    setSnippets((current) => {
+      const activeSnippet = current[0]
+      return [{ ...activeSnippet, code }]
+    })
+  }, [])
+
   const handleClearSelection = useCallback(() => {
     setSelectionContext(null)
   }, [])
@@ -144,6 +169,7 @@ const GenerateContent = () => {
       onCompileError={handleCompileError}
       onFixInChat={handleFixInChat}
       onAddSelectionToContext={handleAddSelectionToContext}
+      onCodeSaved={handleCodeSaved}
       resetKey={searchParams.get('new')}
       chatId={chatId}
       shareTitle={searchParams.get('title') || prompt}
