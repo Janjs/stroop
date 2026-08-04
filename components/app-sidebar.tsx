@@ -99,6 +99,10 @@ export function AppSidebar() {
   }
 
   const handleNewChat = () => {
+    if (!isAuthenticated) {
+      router.push('/')
+      return
+    }
     if (pathname.startsWith('/generate')) {
       router.push(`/generate?new=${Date.now()}`)
     } else {

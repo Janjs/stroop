@@ -50,124 +50,40 @@ function buildFakeResponse(title: string, description: string, code: string): st
 const EXAMPLES = [
   {
     prompt:
-      'Generate a techno bass fugue built from electric bass samples in a minor scale. Create a repeating but evolving bass motif using nested rhythmic groupings and polymetric subdivisions.',
-    title: 'Techno Bass Fugue',
-    code: `samples({ flbass: ['00_c2_finger_long_neck.wav','01_c2_finger_short_neck.wav','02_c2_finger_long_bridge.wav','03_c2_finger_short_bridge.wav','04_c2_pick_long.wav','05_c2_pick_short.wav','06_c2_palm_mute.wav'] }, 
-  'github:cleary/samples-flbass/main/')
-samples({
-bd: ['bd/BT0AADA.wav','bd/BT0AAD0.wav','bd/BT0A0DA.wav','bd/BT0A0D3.wav','bd/BT0A0D0.wav','bd/BT0A0A7.wav'],
-sd: ['sd/rytm-01-classic.wav','sd/rytm-00-hard.wav'],
-hh: ['hh27/000_hh27closedhh.wav','hh/000_hh3closedhh.wav'],
-}, 'github:tidalcycles/dirt-samples');
-
-setcps(1)
-
-"<8(3,8) <7 7*2> [4 5@3] 8>".sub(1)
-.layer(
-x=>x,
-x=>x.add(7)
-.off(1/8,x=>x.add("2,4").off(1/8,x=>x.add(5).echo(4,.125,.5)))
-.slow(2),
-).n().scale('A1 minor')
-.s("flbass").n(0)
-.mul(gain(.3))
-.cutoff(sine.slow(7).range(200,4000))
-.resonance(10)
-.clip(1)
-.stack(s("bd:1*2,~ sd:0,[~ hh:0]*2"))
-.pianoroll({vertical:1})`,
-  },
-  {
-    prompt:
-      'Generate a playful, blippy Rhodes-led groove with a jazzy–electronic feel. Use a bright electric piano playing short, syncopated motifs that loop and mutate.',
-    title: 'Blippy Rhodes Jazz-Techno',
-    code: `samples({
-  bd: 'samples/tidal/bd/BT0A0D0.wav',
-  sn: 'samples/tidal/sn/ST0T0S3.wav',
-  hh: 'samples/tidal/hh/000_hh3closedhh.wav',
-  rhodes: {
-  E1: 'samples/rhodes/MK2Md2000.mp3',
-  E2: 'samples/rhodes/MK2Md2012.mp3',
-  E3: 'samples/rhodes/MK2Md2024.mp3',
-  E4: 'samples/rhodes/MK2Md2036.mp3',
-  E5: 'samples/rhodes/MK2Md2048.mp3',
-  E6: 'samples/rhodes/MK2Md2060.mp3',
-  E7: 'samples/rhodes/MK2Md2072.mp3'
-  }
-}, 'https://loophole-letters.vercel.app/')
-
-stack(
-  s("<bd sn> <hh hh*2 hh*3>").color('#00B8D4'),
-  "<g4 c5 a4 [ab4 <eb5 f5>]>"
-  .scale("<C:major C:mixolydian F:lydian [F:minor <Db:major Db:mixolydian>]>")
-  .struct("x*8")
-  .scaleTranspose("0 [-5,-2] -7 [-9,-2]")
-  .slow(2)
-  .note()
-  .clip(.3)
-  .s('rhodes')
-  .room(.5)
-  .delay(.3)
-  .delayfeedback(.4)
-  .delaytime(1/12).gain(.5).color('#7ED321'),
-  "<c2 c3 f2 [[F2 C2] db2]>/2"
-  .add("0,.02")
-  .note().gain(.3)
-  .clip("<1@3 [.3 1]>/2")
-  .cutoff(600)
-  .lpa(.2).lpenv(-4)
-  .s('sawtooth').color('#F8E71C'),
-).fast(3/2)`,
-  },
-  {
-    prompt:
-      'Generate a minimal, melodic piano pattern in a minor key with a hypnotic, generative feel. Build a short motif from simple scale degrees with subtle polyrhythms.',
-    title: 'Minimal Piano',
-    code: `n("<0 2 [4 6](3,4,2) 3*2>").color('salmon')
-.off(1/4, x=>x.add(n(2)).color('green'))
-.off(1/2, x=>x.add(n(6)).color('steelblue'))
-.scale('D minor')
-.echo(4, 1/8, .5)
-.clip(.5)
-.piano()
-.pianoroll()`,
-  },
-  {
-    prompt:
-      'Generate a live-coded jazz–electronic groove built around rich seventh chords and a steady rhythmic pulse with evolving timbral movement.',
-    title: 'Club-Jazz Csound Groove',
+      'Melancholic pop at 110 bpm with 808 drums, warm electric piano chords, finger bass, and ethereal synth choir pads.',
+    title: 'Melancholic Pop',
     code: `stack(
-  chord("<C^7 A7 Dm7 Fm7>/2").dict('lefthand').voicing()
-  .cutoff(sine.range(500,2000).round().slow(16))
-  .euclidLegato(3,8).s('sawtooth').gain(0.35)
-  .lpf(1200).room(0.3)
-  ,
-  note("<C2 A1 D2 F2>/2").ply(8).s('sawtooth').gain("0.3 0.5 0.3 0.5")
-  .cutoff(400).lpf(800)
-  ,
-  n("0 7 [4 3] 2".fast(2/3).off(".25 .125", add("<2 4 -3 -1>"))
-  .slow(2).scale('A4 minor'))
-  .clip(.25).s('triangle').gain(0.5).delay(0.2).delayfeedback(0.3)
-  ,
-  s("bd*2,[~ hh]*2,~ cp").bank('RolandTR909')
-)`,
-  },
-  {
-    prompt:
-      'Generate a minimal drum-machine groove built from kick, snare, and closed hi-hat only. Use uneven rhythmic groupings and rotated accents.',
-    title: 'Minimal Polyrhythmic Drums',
-    code: `samples({
-  bd: 'bd/BT0A0D0.wav',
-  sn: 'sn/ST0T0S3.wav',
-  hh: 'hh/000_hh3closedhh.wav'
-}, 'https://loophole-letters.vercel.app/samples/tidal/')
-
-stack(
-  "<bd!3 bd(3,4,3)>".color('#F5A623'),
-  "hh*4".color('#673AB7'),
-  "~ <sn!3 sn(3,4,2)>".color('#4CAF50')
-).s()
-.pianoroll({fold:1})`,
+  s("bd [~ bd] bd ~, ~ sd ~ sd, hh*8, ~ ~ ~ oh")
+    .bank("RolandTR808")
+    .gain("0.9 0.65 0.8 0.65")
+    .room(0.12),
+  chord("<Am7 F^7 C^7 G6>")
+    .voicing()
+    .s("gm_epiano1")
+    .clip(0.9)
+    .gain(0.38)
+    .lpf(2200)
+    .room(0.45)
+    .delay(0.12)
+    .delaytime(0.375)
+    .delayfeedback(0.25),
+  note("<a2 f2 c3 g2>")
+    .s("gm_electric_bass_finger")
+    .ply(4)
+    .clip(0.7)
+    .gain("0.55 0.38 0.48 0.38")
+    .lpf(700),
+  note("<[e5 c5 b4 c5] [c5 a4 g4 a4] [g4 e5 d5 c5] [b4 a4 g4 d5]>")
+    .s("gm_synth_choir")
+    .clip(0.65)
+    .gain(0.32)
+    .lpf(2800)
+    .room(0.55)
+    .delay(0.3)
+    .delaytime(0.375)
+    .delayfeedback(0.35)
+    .pan(sine.slow(8).range(0.3, 0.7))
+).cpm(27.5)`,
   },
   {
     prompt:
@@ -201,6 +117,88 @@ stack(
   f3!2 e3!2 ab3!2 ~!2
   >\`).clip(.5)
 ).fast(2)`,
+  },
+  {
+    prompt:
+      'Generate a techno bass fugue built from electric bass samples in a minor scale. Create a repeating but evolving bass motif using nested rhythmic groupings and polymetric subdivisions.',
+    title: 'Techno Bass Fugue',
+    code: `samples({ flbass: ['00_c2_finger_long_neck.wav','01_c2_finger_short_neck.wav','02_c2_finger_long_bridge.wav','03_c2_finger_short_bridge.wav','04_c2_pick_long.wav','05_c2_pick_short.wav','06_c2_palm_mute.wav'] }, 
+  'github:cleary/samples-flbass/main/')
+samples({
+bd: ['bd/BT0AADA.wav','bd/BT0AAD0.wav','bd/BT0A0DA.wav','bd/BT0A0D3.wav','bd/BT0A0D0.wav','bd/BT0A0A7.wav'],
+sd: ['sd/rytm-01-classic.wav','sd/rytm-00-hard.wav'],
+hh: ['hh27/000_hh27closedhh.wav','hh/000_hh3closedhh.wav'],
+}, 'github:tidalcycles/dirt-samples');
+
+setcps(1)
+
+"<8(3,8) <7 7*2> [4 5@3] 8>".sub(1)
+.layer(
+x=>x,
+x=>x.add(7)
+.off(1/8,x=>x.add("2,4").off(1/8,x=>x.add(5).echo(4,.125,.5)))
+.slow(2),
+).n().scale('A1 minor')
+.s("flbass").n(0)
+.mul(gain(.3))
+.cutoff(sine.slow(7).range(200,4000))
+.resonance(10)
+.clip(1)
+.stack(s("bd:1*2,~ sd:0,[~ hh:0]*2"))
+.pianoroll({vertical:1})`,
+  },
+  {
+    prompt:
+      'Generate a playful, blippy Rhodes-led groove with a jazzy–electronic feel. Use a bright electric piano playing short, syncopated motifs that loop and mutate.',
+    title: 'Blippy Rhodes Jazz-Techno',
+    code: `samples({
+  bd: 'bd/BT0A0D0.wav',
+  sn: 'sn/ST0T0S3.wav',
+  hh: 'hh/000_hh3closedhh.wav',
+}, 'github:tidalcycles/dirt-samples')
+
+stack(
+  s("<bd sn> <hh hh*2 hh*3>").color('#00B8D4'),
+  "<g4 c5 a4 [ab4 <eb5 f5>]>"
+  .scale("<C:major C:mixolydian F:lydian [F:minor <Db:major Db:mixolydian>]>")
+  .struct("x*8")
+  .scaleTranspose("0 [-5,-2] -7 [-9,-2]")
+  .slow(2)
+  .note()
+  .clip(.3)
+  .s('gm_epiano1')
+  .room(.5)
+  .delay(.3)
+  .delayfeedback(.4)
+  .delaytime(1/12).gain(.5).color('#7ED321'),
+  "<c2 c3 f2 [[F2 C2] db2]>/2"
+  .add("0,.02")
+  .note().gain(.3)
+  .clip("<1@3 [.3 1]>/2")
+  .cutoff(600)
+  .lpa(.2).lpenv(-4)
+  .s('sawtooth').color('#F8E71C'),
+).fast(3/2)`,
+  },
+  {
+    prompt:
+      'Generate a live-coded jazz–electronic groove built around rich seventh chords and a steady rhythmic pulse with evolving timbral movement.',
+    title: 'Club-Jazz Csound Groove',
+    code: `stack(
+  chord("<C^7 A7 Dm7 Fm7>/2").dict('lefthand').voicing()
+  .cutoff(sine.range(500,2000).round().slow(16))
+  .euclidLegato(3,8).s('sawtooth').gain(0.35)
+  .lpf(1200).room(0.3)
+  ,
+  note("<C2 A1 D2 F2>/2").ply(8).s('sawtooth').gain("0.3 0.5 0.3 0.5")
+  .cutoff(400).lpf(800)
+  ,
+  n("0 7 [4 3] 2".fast(2/3).off(".25 .125", add("<2 4 -3 -1>"))
+  .slow(2).scale('A4 minor'))
+  .clip(.25).s('triangle').gain(0.5).delay(0.2).delayfeedback(0.3)
+  ,
+  s("bd*2,[~ hh]*2,~ cp").bank('RolandTR909')
+)`,
   },
 ]
 

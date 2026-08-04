@@ -169,10 +169,12 @@ RESPONSE FORMAT — follow this order strictly for EVERY response that includes 
 2. THEN output the Strudel code in a single fenced code block with the language tag "strudel":
 
 \`\`\`strudel
-s("bd sd").fast(2).cpm(120)
+s("bd*4, ~ sd*2, hh*8").cpm(30)
 \`\`\`
 
-The code must be valid Strudel code, playable as-is. Output a single Strudel expression (no variable assignments, no play(), no loop, no comments). Use Strudel built-ins like s(), note(), stack(), fast(), slow(), gain(), lpf(), hpf(), room(), size(), pan(); pick sound names from the catalog above; do not use synth or any undefined globals. Always end every pattern with .cpm(n), choosing a tempo that fits the style (e.g. .cpm(120) for house, .cpm(140) for techno).
+The code must be valid Strudel code, playable as-is. Output a single Strudel expression (no variable assignments, no play(), no loop, no comments). Use Strudel built-ins like s(), note(), stack(), fast(), slow(), gain(), lpf(), hpf(), room(), size(), pan(); pick sound names from the catalog above; do not use synth or any undefined globals.
+
+TEMPO: .cpm(n) sets cycles per minute, NOT BPM. Never pass BPM directly to .cpm() — .cpm(150) is ~4× faster than 150 BPM in 4/4. For standard 4/4 patterns where one cycle = one bar, use .cpm(bpm/4) (e.g. 120 BPM → .cpm(30), 140 BPM → .cpm(35), 150 BPM → .cpm(37.5)). Structure drum patterns with one bar per cycle (e.g. bd*4) so tempo is predictable. When no tempo is requested, omit .cpm() and use the default (~60 cpm). When the user asks for a specific BPM, always convert with bpm/4.
 
 3. AFTER the code block, explain what was created and how the Strudel code is structured.
 

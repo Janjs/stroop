@@ -18,17 +18,110 @@ import { Icons } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { useTheme } from 'next-themes'
 import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
-
-type StrudelEditorElement = HTMLElement & {
-  editor?: {
-    setCode?: (code: string) => void
-    evaluate?: (autostart?: boolean) => void | Promise<unknown>
-    start?: () => void
-    stop?: () => void
-  }
-}
+import {
+  playStrudelEditor,
+  setStrudelEditorCode,
+  type StrudelEditorElement,
+} from '@/lib/strudel-editor-code'
 
 const EXAMPLES = [
+  {
+    title: 'Melancholic Pop',
+    prompt:
+      'Melancholic pop at 110 bpm with 808 drums, warm electric piano chords, finger bass, and ethereal synth choir pads.',
+    code: `stack(
+  s("bd [~ bd] bd ~, ~ sd ~ sd, hh*8, ~ ~ ~ oh")
+    .bank("RolandTR808"),
+  chord("<Am7 F^7 C^7 G6>")
+    .voicing().s("gm_epiano1")
+    .room(0.45).delay(0.12),
+  note("<a2 f2 c3 g2>")
+    .s("gm_electric_bass_finger").ply(4),
+  note("<[e5 c5 b4 c5] [c5 a4 g4 a4] [g4 e5 d5 c5] [b4 a4 g4 d5]>")
+    .s("gm_synth_choir")
+    .room(0.55).delay(0.3)
+).cpm(27.5)`,
+    fullCode: `stack(
+  s("bd [~ bd] bd ~, ~ sd ~ sd, hh*8, ~ ~ ~ oh")
+    .bank("RolandTR808")
+    .gain("0.9 0.65 0.8 0.65")
+    .room(0.12),
+  chord("<Am7 F^7 C^7 G6>")
+    .voicing()
+    .s("gm_epiano1")
+    .clip(0.9)
+    .gain(0.38)
+    .lpf(2200)
+    .room(0.45)
+    .delay(0.12)
+    .delaytime(0.375)
+    .delayfeedback(0.25),
+  note("<a2 f2 c3 g2>")
+    .s("gm_electric_bass_finger")
+    .ply(4)
+    .clip(0.7)
+    .gain("0.55 0.38 0.48 0.38")
+    .lpf(700),
+  note("<[e5 c5 b4 c5] [c5 a4 g4 a4] [g4 e5 d5 c5] [b4 a4 g4 d5]>")
+    .s("gm_synth_choir")
+    .clip(0.65)
+    .gain(0.32)
+    .lpf(2800)
+    .room(0.55)
+    .delay(0.3)
+    .delaytime(0.375)
+    .delayfeedback(0.35)
+    .pan(sine.slow(8).range(0.3, 0.7))
+).cpm(27.5)`,
+  },
+  {
+    title: 'Chiptune Platformer Theme',
+    prompt:
+      'Generate a chiptune-style platformer theme inspired by classic 8-bit game music. Write a bright, catchy lead melody that feels playful and heroic.',
+    code: `stack(
+  note(\`<
+  [e5 ~] [[d5@2 c5] [~@2 e5]] ~
+  [~ [c5@2 d5]] [e5 e5] [d5 c5]
+  [e5 f5] [g5 a5]
+  >\`).clip(.95),
+  note(\`<
+  [~ g4]!2 [~ ab4]!2
+  [~ a4]!2 [~ bb4]!2
+  >\`),
+  note("<c3!7 a3 f3!2 e3!2>")
+  .clip(.5)
+).fast(2)`,
+    fullCode: `stack(
+  note(\`<
+  [e5 ~] [[d5@2 c5] [~@2 e5]] ~ [~ [c5@2 d5]] [e5 e5] [d5 c5] [e5 f5] [g5 a5]
+  [~ c5] [c5 d5] [e5 [c5@2 c5]] [~ c5] [f5 e5] [c5 d5] [~ g6] [g6 ~]
+  [e5 ~] [[d5@2 c5] [~@2 e5]] ~ [~ [c5@2 d5]] [e5 e5] [d5 c5] [a5 g5] [c6 [e5@2 d5]]
+  [~ c5] [c5 d5] [e5 [c5@2 c5]] [~ c5] [f5 e5] [c5 d5] [~ [g6@2 ~] ~@2] [g5 ~] 
+  [~ a5] [b5 c6] [b5@2 ~@2 g5] ~
+  [f5 ~] [[g5@2 f5] ~] [[e5 ~] [f5 ~]] [[f#5 ~] [g5 ~]]
+  [~ a5] [b5 c6] [b5@2 ~@2 g5] ~
+  [eb6 d6] [~ c6] ~!2
+  >\`)
+  .clip(.95),
+  note(\`<
+  [~ g4]!2 [~ ab4]!2 [~ a4]!2 [~ bb4]!2 
+  [~ a4]!2 [~ g4]!2 [d4 e4] [f4 gb4] ~!2
+  [~ g4]!2 [~ ab4]!2 [~ a4]!2 [~ bb4]!2 
+  [~ a4]!2 [~ g4]!2 [d4 e4] [f4 gb4] ~!2
+  [~ c5]!4 [~ a4]!2 [[c4 ~] [d4 ~]] [[eb4 ~] [e4 ~]]
+  [~ c5]!4 [~ eb5]!2 [g4*2 [f4 ~]] [[e4 ~] [d4 ~]]
+  >\`),
+  note(\`<
+  c3!7 a3 f3!2
+  e3!2 ~!4
+  c3!7 a3 f3!2
+  e3!2 ~!4
+  f3!2 e3!2 d3!2 ~!2
+  f3!2 e3!2 ab3!2 ~!2
+  >\`)
+  .clip(.5)
+).fast(2)`,
+  },
   {
     title: 'Techno Bass Fugue',
     prompt:
@@ -84,19 +177,10 @@ x=>x.add(7)
   .delay(.3).delayfeedback(.4),
 ).fast(3/2)`,
     fullCode: `samples({
-  bd: 'samples/tidal/bd/BT0A0D0.wav',
-  sn: 'samples/tidal/sn/ST0T0S3.wav',
-  hh: 'samples/tidal/hh/000_hh3closedhh.wav',
-  rhodes: {
-  E1: 'samples/rhodes/MK2Md2000.mp3',
-  E2: 'samples/rhodes/MK2Md2012.mp3',
-  E3: 'samples/rhodes/MK2Md2024.mp3',
-  E4: 'samples/rhodes/MK2Md2036.mp3',
-  E5: 'samples/rhodes/MK2Md2048.mp3',
-  E6: 'samples/rhodes/MK2Md2060.mp3',
-  E7: 'samples/rhodes/MK2Md2072.mp3'
-  }
-}, 'https://loophole-letters.vercel.app/')
+  bd: 'bd/BT0A0D0.wav',
+  sn: 'sn/ST0T0S3.wav',
+  hh: 'hh/000_hh3closedhh.wav',
+}, 'github:tidalcycles/dirt-samples')
 
 stack(
   s("<bd sn> <hh hh*2 hh*3>").color('#00B8D4'),
@@ -107,7 +191,7 @@ stack(
   .slow(2)
   .note()
   .clip(.3)
-  .s('rhodes')
+  .s('gm_epiano1')
   .room(.5)
   .delay(.3)
   .delayfeedback(.4)
@@ -120,27 +204,6 @@ stack(
   .lpa(.2).lpenv(-4)
   .s('sawtooth').color('#F8E71C'),
 ).fast(3/2)`,
-  },
-  {
-    title: 'Minimal Piano',
-    prompt:
-      'Generate a minimal, melodic piano pattern in a minor key with a hypnotic, generative feel. Build a short motif from simple scale degrees with subtle polyrhythms.',
-    code: `n("<0 2 [4 6](3,4,2) 3*2>")
-.off(1/4, x=>x.add(n(2)))
-.off(1/2, x=>x.add(n(6)))
-.scale('D minor')
-.echo(4, 1/8, .5)
-.clip(.5)
-.piano()
-.pianoroll()`,
-    fullCode: `n("<0 2 [4 6](3,4,2) 3*2>").color('salmon')
-.off(1/4, x=>x.add(n(2)).color('green'))
-.off(1/2, x=>x.add(n(6)).color('steelblue'))
-.scale('D minor')
-.echo(4, 1/8, .5)
-.clip(.5)
-.piano()
-.pianoroll()`,
   },
   {
     title: 'Club-Jazz Csound Groove',
@@ -172,77 +235,6 @@ stack(
   s("bd*2,[~ hh]*2,~ cp").bank('RolandTR909')
 )`,
   },
-  {
-    title: 'Minimal Polyrhythmic Drums',
-    prompt:
-      'Generate a minimal drum-machine groove built from kick, snare, and closed hi-hat only. Use uneven rhythmic groupings and rotated accents.',
-    code: `stack(
-  "<bd!3 bd(3,4,3)>",
-  "hh*4",
-  "~ <sn!3 sn(3,4,2)>"
-).s()
-.pianoroll({fold:1})`,
-    fullCode: `samples({
-  bd: 'bd/BT0A0D0.wav',
-  sn: 'sn/ST0T0S3.wav',
-  hh: 'hh/000_hh3closedhh.wav'
-}, 'https://loophole-letters.vercel.app/samples/tidal/')
-
-stack(
-  "<bd!3 bd(3,4,3)>".color('#F5A623'),
-  "hh*4".color('#673AB7'),
-  "~ <sn!3 sn(3,4,2)>".color('#4CAF50')
-).s()
-.pianoroll({fold:1})`,
-  },
-  {
-    title: 'Chiptune Platformer Theme',
-    prompt:
-      'Generate a chiptune-style platformer theme inspired by classic 8-bit game music. Write a bright, catchy lead melody that feels playful and heroic.',
-    code: `stack(
-  note(\`<
-  [e5 ~] [[d5@2 c5] [~@2 e5]] ~
-  [~ [c5@2 d5]] [e5 e5] [d5 c5]
-  [e5 f5] [g5 a5]
-  >\`).clip(.95),
-  note(\`<
-  [~ g4]!2 [~ ab4]!2
-  [~ a4]!2 [~ bb4]!2
-  >\`),
-  note("<c3!7 a3 f3!2 e3!2>")
-  .clip(.5)
-).fast(2)`,
-    fullCode: `stack(
-  note(\`<
-  [e5 ~] [[d5@2 c5] [~@2 e5]] ~ [~ [c5@2 d5]] [e5 e5] [d5 c5] [e5 f5] [g5 a5]
-  [~ c5] [c5 d5] [e5 [c5@2 c5]] [~ c5] [f5 e5] [c5 d5] [~ g6] [g6 ~]
-  [e5 ~] [[d5@2 c5] [~@2 e5]] ~ [~ [c5@2 d5]] [e5 e5] [d5 c5] [a5 g5] [c6 [e5@2 d5]]
-  [~ c5] [c5 d5] [e5 [c5@2 c5]] [~ c5] [f5 e5] [c5 d5] [~ [g6@2 ~] ~@2] [g5 ~] 
-  [~ a5] [b5 c6] [b5@2 ~@2 g5] ~
-  [f5 ~] [[g5@2 f5] ~] [[e5 ~] [f5 ~]] [[f#5 ~] [g5 ~]]
-  [~ a5] [b5 c6] [b5@2 ~@2 g5] ~
-  [eb6 d6] [~ c6] ~!2
-  >\`)
-  .clip(.95),
-  note(\`<
-  [~ g4]!2 [~ ab4]!2 [~ a4]!2 [~ bb4]!2 
-  [~ a4]!2 [~ g4]!2 [d4 e4] [f4 gb4] ~!2
-  [~ g4]!2 [~ ab4]!2 [~ a4]!2 [~ bb4]!2 
-  [~ a4]!2 [~ g4]!2 [d4 e4] [f4 gb4] ~!2
-  [~ c5]!4 [~ a4]!2 [[c4 ~] [d4 ~]] [[eb4 ~] [e4 ~]]
-  [~ c5]!4 [~ eb5]!2 [g4*2 [f4 ~]] [[e4 ~] [d4 ~]]
-  >\`),
-  note(\`<
-  c3!7 a3 f3!2
-  e3!2 ~!4
-  c3!7 a3 f3!2
-  e3!2 ~!4
-  f3!2 e3!2 d3!2 ~!2
-  f3!2 e3!2 ab3!2 ~!2
-  >\`)
-  .clip(.5)
-).fast(2)`,
-  },
 ]
 
 export default function ExamplesCarousel() {
@@ -252,33 +244,39 @@ export default function ExamplesCarousel() {
   const [playingIndex, setPlayingIndex] = useState<number | null>(null)
   const [isEditorReady, setIsEditorReady] = useState(false)
   const [mounted, setMounted] = useState(false)
-  const editorRefs = useRef<(StrudelEditorElement | null)[]>([])
-  const playingEditorRef = useRef<StrudelEditorElement | null>(null)
+  const replRef = useRef<StrudelEditorElement | null>(null)
   const playingIndexRef = useRef<number | null>(null)
+  const lastEvaluatedCodeRef = useRef('')
   const { resolvedTheme } = useTheme()
 
   playingIndexRef.current = playingIndex
 
+  const stopPlayback = useCallback(() => {
+    replRef.current?.editor?.stop?.()
+    playingIndexRef.current = null
+    setPlayingIndex(null)
+  }, [])
+
   useEffect(() => setMounted(true), [])
 
   useEffect(() => {
-    const stopPlayback = () => {
-      playingEditorRef.current?.editor?.stop?.()
-      playingEditorRef.current = null
-      playingIndexRef.current = null
-      setPlayingIndex(null)
-    }
-    window.addEventListener('blur', stopPlayback)
-    return () => {
-      window.removeEventListener('blur', stopPlayback)
-      stopPlayback()
-    }
+    void loadStrudelRepl()
   }, [])
 
   useEffect(() => {
-    if (!mounted) return
-    void loadStrudelRepl()
-  }, [mounted])
+    const stopWhenHidden = () => {
+      if (document.hidden) stopPlayback()
+    }
+    window.addEventListener('blur', stopPlayback)
+    window.addEventListener('pagehide', stopPlayback)
+    document.addEventListener('visibilitychange', stopWhenHidden)
+    return () => {
+      window.removeEventListener('blur', stopPlayback)
+      window.removeEventListener('pagehide', stopPlayback)
+      document.removeEventListener('visibilitychange', stopWhenHidden)
+      stopPlayback()
+    }
+  }, [stopPlayback])
 
   useEffect(() => {
     if (!api) return
@@ -288,38 +286,35 @@ export default function ExamplesCarousel() {
   }, [api])
 
   useEffect(() => {
+    if (!mounted) return
+    replRef.current?.editor?.stop?.()
+    playingIndexRef.current = null
+    setPlayingIndex(null)
+    setIsEditorReady(false)
+    lastEvaluatedCodeRef.current = ''
+
     let frameId = 0
     const init = () => {
-      const allReady = EXAMPLES.every((_, i) => editorRefs.current[i]?.editor)
-      if (allReady) {
+      const repl = replRef.current
+      if (repl?.editor) {
+        setStrudelEditorCode(repl, EXAMPLES[current].fullCode)
+        lastEvaluatedCodeRef.current = ''
         setIsEditorReady(true)
-        EXAMPLES.forEach((example, i) => {
-          const repl = editorRefs.current[i]
-          if (repl?.editor?.setCode) {
-            repl.editor.setCode(example.fullCode)
-          }
-        })
         return
       }
       frameId = window.requestAnimationFrame(init)
     }
     frameId = window.requestAnimationFrame(init)
     return () => window.cancelAnimationFrame(frameId)
-  }, [])
+  }, [current, mounted])
 
   useEffect(() => {
     if (playingIndex !== null && playingIndex !== current) {
-      const repl = editorRefs.current[playingIndex]
-      repl?.editor?.stop?.()
-      if (repl?.editor?.setCode) repl.editor.setCode(EXAMPLES[playingIndex].fullCode)
+      replRef.current?.editor?.stop?.()
+      playingIndexRef.current = null
       setPlayingIndex(null)
     }
   }, [current, playingIndex])
-
-  const scrollTo = useCallback(
-    (index: number) => api?.scrollTo(index),
-    [api],
-  )
 
   useEffect(() => {
     if (!isEditorReady || !resolvedTheme) return
@@ -330,6 +325,7 @@ export default function ExamplesCarousel() {
       const fontMono = get('--font-mono') || 'monospace'
       const primary = get('--editor-primary')
       const accent = get('--editor-accent')
+      const accentFg = get('--editor-accent-foreground')
       const secondary = get('--secondary')
       const mutedFg = get('--muted-foreground')
       const ring = get('--editor-ring')
@@ -337,6 +333,10 @@ export default function ExamplesCarousel() {
       const pastel = (color: string) =>
         isDark ? `color-mix(in oklab, ${color} 40%, ${fg})` : `color-mix(in oklab, ${color} 70%, ${fg})`
       const palette = [pastel(primary), pastel(accent), pastel(secondary), pastel(mutedFg), pastel(ring), pastel(fg)]
+      const noteHighlightColor = accentFg
+      const noteHighlightBg = isDark
+        ? `color-mix(in oklab, ${accentFg} 22%, transparent)`
+        : `color-mix(in oklab, ${accentFg} 14%, transparent)`
       const cmTokenChar = '\u037C'
       const tokenClasses = new Set<string>()
       for (const sheet of document.styleSheets) {
@@ -366,11 +366,11 @@ export default function ExamplesCarousel() {
 .strudel-example-editor .cm-editor{background-color:transparent !important;color:${fg} !important;height:100%;}
 .strudel-example-editor .cm-scroller{background-color:transparent !important;overflow:auto !important;}
 .strudel-example-editor .cm-content{color:${fg} !important;padding:12px;}
+.strudel-example-editor .cm-content span[style*="outline"]{outline:1px solid ${noteHighlightColor} !important;background-color:${noteHighlightBg} !important;border-radius:2px;}
 .strudel-example-editor .cm-gutters{display:none !important;}
 .strudel-example-editor .cm-activeLine{background:transparent !important;}
 .strudel-example-editor .cm-editor.cm-focused{outline:none;}
 .strudel-example-editor .cm-cursor{border-left-color:${fg};}
-.strudel-example-editor .cm-editor .cm-flash{background-color:hsl(0 84% 60% / 0.25) !important;outline:1px solid hsl(0 84% 60% / 0.5);border-radius:2px;}
 ${tokenRules}
 `
       document.head.appendChild(styleEl)
@@ -384,36 +384,30 @@ ${tokenRules}
     }
   }, [isEditorReady, resolvedTheme])
 
-  const handleTogglePlay = async (index: number) => {
-    const current = playingIndexRef.current
+  const scrollTo = useCallback(
+    (index: number) => api?.scrollTo(index),
+    [api],
+  )
 
-    if (current === index) {
-      const repl = editorRefs.current[index]
-      repl?.editor?.stop?.()
-      playingEditorRef.current = null
-      repl?.editor?.setCode?.(EXAMPLES[index].fullCode)
+  const handleTogglePlay = async (index: number) => {
+    if (index !== current) return
+    const repl = replRef.current
+    if (!repl?.editor) return
+
+    if (playingIndexRef.current === index) {
+      repl.editor.stop?.()
       playingIndexRef.current = null
       setPlayingIndex(null)
       return
     }
 
-    if (current !== null) {
-      const prev = editorRefs.current[current]
-      prev?.editor?.stop?.()
-      playingEditorRef.current = null
-      prev?.editor?.setCode?.(EXAMPLES[current].fullCode)
+    if (playingIndexRef.current !== null) {
+      repl.editor.stop?.()
     }
 
-    const repl = editorRefs.current[index]
-    if (!repl?.editor) return
-
     try {
-      const result = repl.editor.evaluate?.()
-      if (result && typeof (result as Promise<unknown>).then === 'function') {
-        await result
-      }
-      repl.editor.start?.()
-      playingEditorRef.current = repl
+      lastEvaluatedCodeRef.current =
+        (await playStrudelEditor(repl, lastEvaluatedCodeRef.current)) ?? lastEvaluatedCodeRef.current
       playingIndexRef.current = index
       setPlayingIndex(index)
     } catch (error) {
@@ -453,7 +447,7 @@ ${tokenRules}
                         event.preventDefault()
                         void handleTogglePlay(i)
                       }}
-                      disabled={!isEditorReady}
+                      disabled={!isEditorReady || i !== current}
                     >
                       {playingIndex === i ? (
                         <Pause className="h-3.5 w-3.5" />
@@ -477,14 +471,21 @@ ${tokenRules}
                       </span>
                     </div>
                     <div className="max-h-[180px] overflow-y-auto">
-                      {mounted && createElement('strudel-editor', {
-                        ref: (el: StrudelEditorElement | null) => { editorRefs.current[i] = el },
-                        className: 'w-full h-0 min-h-0 overflow-hidden',
-                      })}
+                      {i === current && mounted
+                        ? createElement('strudel-editor', {
+                            ref: replRef,
+                            className: 'w-full h-0 min-h-0 overflow-hidden',
+                          })
+                        : (
+                          <pre className="p-3 text-xs leading-relaxed font-mono text-foreground/80">
+                            <code>{example.code}</code>
+                          </pre>
+                        )}
                     </div>
                   </div>
                   <Link
                     href={`/generate?prompt=${encodeURIComponent(example.prompt)}`}
+                    onClick={stopPlayback}
                   >
                     <Button
                       variant="ghost"

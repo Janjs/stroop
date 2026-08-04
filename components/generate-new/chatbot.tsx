@@ -45,9 +45,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ChevronDownIcon, ArrowDownIcon, XIcon } from 'lucide-react'
 
+import { TEMPO_LABELS } from '@/lib/tempo-suggestions'
+
 const MOODS = ['Happy', 'Sad', 'Dreamy', 'Energetic', 'Chill', 'Melancholic', 'Romantic', 'Mysterious']
 const GENRES = ['Jazz', 'Pop', 'R&B', 'Classical', 'Lo-fi', 'Rock', 'Blues', 'Folk']
-const TEMPOS = ['70 bpm', '90 bpm', '110 bpm', '130 bpm', '150 bpm']
 
 const extractStrudelCode = (text: string): string | null => {
   const marker = '```strudel\n'
@@ -1178,7 +1179,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           <Label className="mb-2 text-xs text-muted-foreground">Tempo</Label>
           <SuggestionsWithFade className="my-1">
             <Suggestions className="mb-2 py-1 ml-0.5">
-              {TEMPOS.map((tempo) => (
+              {TEMPO_LABELS.map((tempo) => (
                 <Suggestion
                   key={tempo}
                   suggestion={tempo}

@@ -5,7 +5,17 @@ This guide condenses all Strudel learn content into a single reference for writi
 ## What Strudel Is
 - Strudel is a browser-based live coding environment based on Tidal Cycles.
 - Patterns are expressed as functions chained together in JavaScript.
-- Time is organized into repeating **cycles** (default 1 cycle/second).
+- Time is organized into repeating **cycles** (default 1 cycle/second = 60 cpm via `setcps(1)`).
+
+## Tempo (CPM vs BPM)
+- `.cpm(n)` sets **cycles per minute**, not beats per minute. Never pass a BPM value directly to `.cpm()`.
+- For standard 4/4 patterns where one cycle = one bar (4 beats), convert BPM to CPM: **`.cpm(bpm/4)`**
+  - 120 BPM → `.cpm(30)`
+  - 140 BPM → `.cpm(35)`
+  - 150 BPM → `.cpm(37.5)`
+- Structure drum patterns so one cycle equals one bar for predictable tempo, e.g. `s("bd*4, ~ sd*2, hh*8")`.
+- `.cpm(120)` does **not** mean 120 BPM — in 4/4 it plays at ~480 BPM. This is the most common tempo mistake.
+- When the user does not specify a tempo, omit `.cpm()` and rely on the default (~60 cpm), matching the examples.
 
 ## Core Syntax
 - Functions take arguments in parentheses and can be chained with dots:
@@ -334,8 +344,8 @@ Truly continuous parameters: ADSR curves, pitch envelope, FM envelope, filter en
 - `outside(n, fn)` — apply fn as if the pattern were n times slower.
 - `clip(n)` / `legato(n)` — set note length relative to event (1 = full, <1 = staccato, >1 = overlap).
 - `euclidLegato(beats, segs)` — euclidean with legato notes.
-- `cpm(n)` — set cycles per minute.
-- `setcpm(n)` — global cycles per minute.
+- `cpm(n)` — set cycles per minute (not BPM; use `bpm/4` for 4/4 bar-per-cycle patterns).
+- `setcpm(n)` — global cycles per minute (e.g. `setcpm(140/4)` for 140 BPM in 4/4).
 - `swing(amount)` — add swing feel.
 - `swingBy(amount, division)` — swing with specific subdivision.
 - `ribbon` — treat pattern as a continuous ribbon of events.

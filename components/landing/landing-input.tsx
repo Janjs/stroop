@@ -17,6 +17,7 @@ import {
   Suggestion,
 } from '@/components/ai-elements/suggestion'
 import { Label } from '@/components/ui/label'
+import { TEMPO_LABELS } from '@/lib/tempo-suggestions'
 
 function SuggestionsWithFade({ children, className }: { children: React.ReactNode; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -61,7 +62,6 @@ function SuggestionsWithFade({ children, className }: { children: React.ReactNod
 
 const MOODS = ['Happy', 'Sad', 'Dreamy', 'Energetic', 'Chill', 'Melancholic', 'Romantic', 'Mysterious']
 const GENRES = ['Jazz', 'Pop', 'R&B', 'Classical', 'Lo-fi', 'Rock', 'Blues', 'Folk']
-const TEMPOS = ['70 bpm', '90 bpm', '110 bpm', '130 bpm', '150 bpm']
 
 function constructPrompt(mood: string | null, genre: string | null, tempo: string | null) {
   const parts: string[] = []
@@ -144,7 +144,7 @@ function LandingInputContent() {
         <Label className="mb-2 text-xs text-muted-foreground">Tempo</Label>
         <SuggestionsWithFade className="my-1">
           <Suggestions className="py-1 ml-0.5">
-            {TEMPOS.map((tempo) => (
+            {TEMPO_LABELS.map((tempo) => (
               <Suggestion
                 key={tempo}
                 suggestion={tempo}
