@@ -457,7 +457,7 @@ ${tokenRules}
       } else {
         const previousCode = lastSetNormalizedCodeRef.current
         isApplyingExternalCodeRef.current = true
-        if (previousCode && previousCode !== normalizedCode && !editorMissingCode) {
+        if (previousCode && previousCode !== normalizedCode && !editorMissingCode && isCodeStreaming) {
           updateStrudelEditorCode(repl, normalizedCode, previousCode)
         } else {
           setStrudelEditorCode(repl, normalizedCode)

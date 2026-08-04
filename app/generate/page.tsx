@@ -157,9 +157,13 @@ const GenerateContent = () => {
     })
   }, [snippets, isCodeStreaming, chatStatus])
 
-  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean }) => {
+  const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean; streamingOnly?: boolean }) => {
     const fromChatLoad = options?.fromChatLoad ?? false
     const streaming = options?.streaming ?? false
+    if (options?.streamingOnly) {
+      setIsCodeStreaming(streaming)
+      return
+    }
     setIsCodeStreaming(streaming)
     setSnippets((prev) => {
       const next = newSnippets.slice(-1)
@@ -176,6 +180,12 @@ const GenerateContent = () => {
       }
     }
   }, [isMobile])
+
+  useEffect(() => {
+    if (chatStatus === 'ready' || chatStatus === 'error') {
+      setIsCodeStreaming(false)
+    }
+  }, [chatStatus])
 
   const handleToolError = useCallback((message: string) => {
     setError(message)

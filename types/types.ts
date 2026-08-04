@@ -14,6 +14,11 @@ export type EditorContext = {
   selection?: EditorSelectionContext
 }
 
+export type ChatMessageMetadata = {
+  hidden?: boolean
+  selectionContext?: EditorSelectionContext
+}
+
 export interface GenerateStrudelRequest {
   prompt: string
 }

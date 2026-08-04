@@ -3,7 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type MutableRefObject } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
-import { StrudelSnippet, EditorContext, EditorSelectionContext } from '@/types/types'
+import { StrudelSnippet, EditorContext, EditorSelectionContext, ChatMessageMetadata } from '@/types/types'
 import { useQuery, useMutation, useConvexAuth } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { useSignIn } from '@/hooks/useSignIn'
@@ -44,6 +44,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ChevronDownIcon, ArrowDownIcon, XIcon } from 'lucide-react'
+import { MessageSelectionContext } from '@/components/generate-new/message-selection-context'
 
 import { TEMPO_LABELS } from '@/lib/tempo-suggestions'
 
@@ -169,7 +170,21 @@ const getPreviousGenerationCode = (
   return undefined
 }
 
-const isHiddenMessage = (message: any) => Boolean((message.metadata as { hidden?: boolean })?.hidden)
+const isHiddenMessage = (message: any) => Boolean((message.metadata as ChatMessageMetadata)?.hidden)
+
+const getMessageSelectionContext = (message: any): EditorSelectionContext | undefined =>
+  (message.metadata as ChatMessageMetadata | undefined)?.selectionContext
+
+function toChatSaveMessage(message: any): ChatSaveMessage {
+  return {
+    id: String(message.id),
+    role: message.role as 'user' | 'assistant',
+    content: getMessageFullText(message),
+    parts: message.parts,
+    metadata: message.metadata as ChatMessageMetadata | undefined,
+    createdAt: message.createdAt instanceof Date ? message.createdAt.getTime() : Date.now(),
+  }
+}
 
 const extractSnippetsFromMessages = (messages: any[]): StrudelSnippet[] => {
   const snippets: StrudelSnippet[] = []
@@ -323,7 +338,7 @@ function ConversationWithFade({ children, className, onViewportReady }: { childr
 interface ChatbotProps {
   prompt?: string
   chatId?: string
-  onSnippetsGenerated?: (snippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean }) => void
+  onSnippetsGenerated?: (snippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean; streamingOnly?: boolean }) => void
   onToolError?: (message: string) => void
   onChatCreated?: (chatId: string) => void
   fixRequest?: { message: string; code: string; id: number } | null
@@ -343,6 +358,7 @@ export type ChatSaveMessage = {
   role: 'user' | 'assistant'
   content: string
   parts?: unknown
+  metadata?: ChatMessageMetadata
   createdAt: number
 }
 
@@ -351,13 +367,18 @@ export type ChatSaveContext = {
 }
 
 function serializeChatMessages(messages: any[]): ChatSaveMessage[] {
-  return messages.map((message) => ({
-    id: String(message.id),
-    role: message.role as 'user' | 'assistant',
-    content: getMessageFullText(message),
-    parts: message.parts,
-    createdAt: message.createdAt instanceof Date ? message.createdAt.getTime() : Date.now(),
-  }))
+  return messages.map(toChatSaveMessage)
+}
+
+function UserMessageText({ message, text }: { message: any; text: string }) {
+  const selection = getMessageSelectionContext(message)
+
+  return (
+    <>
+      {selection && <MessageSelectionContext selection={selection} />}
+      <MessageResponse>{text}</MessageResponse>
+    </>
+  )
 }
 
 function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection, saveContextRef, pendingChatNavigationRef, onChatStatusChange }: ChatbotProps) {
@@ -378,6 +399,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const lastSnippetScopeKeyRef = useRef<string | null>(null)
 
   const lastPushedCodeRef = useRef<string | null>(null)
+  const hadExistingCodeAtGenerationStartRef = useRef(false)
   const isLoadingChatRef = useRef(false)
   const preferSavedSnippetsRef = useRef(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -395,14 +417,19 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const onChatStatusChangeRef = useRef(onChatStatusChange)
   onChatStatusChangeRef.current = onChatStatusChange
 
-  const pushSnippets = useCallback((snippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean }) => {
+  const pushSnippets = useCallback((snippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean; streamingOnly?: boolean }) => {
+    if (options?.streamingOnly) {
+      onSnippetsGeneratedRef.current?.(snippets, options)
+      return
+    }
+
     const code = snippets[0]?.code?.trim()
     if (!code) return
     if (!options?.fromChatLoad && !options?.streaming && code === lastPushedCodeRef.current) return
 
     if (options?.fromChatLoad) {
       preferSavedSnippetsRef.current = true
-    } else if (options?.streaming) {
+    } else if (!options?.streamingOnly) {
       preferSavedSnippetsRef.current = false
     }
 
@@ -464,6 +491,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const chatRequestContextRef = useRef({
     currentSnippets: undefined as StrudelSnippet[] | undefined,
     getEditorContext: undefined as (() => EditorContext) | undefined,
+    pendingSelectionContext: undefined as EditorSelectionContext | undefined,
   })
   chatRequestContextRef.current.currentSnippets = currentSnippets
   chatRequestContextRef.current.getEditorContext = getEditorContext
@@ -474,12 +502,24 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         api: '/api/chat',
         prepareSendMessagesRequest: ({ messages, body }) => {
           const editorContext = chatRequestContextRef.current.getEditorContext?.()
-          const bodyRecord = body as { currentCode?: string; repairContext?: unknown }
+          const bodyRecord = body as {
+            currentCode?: string
+            repairContext?: unknown
+            selectionContext?: EditorSelectionContext
+          }
+          const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user')
+          const metadataSelection = (latestUserMessage?.metadata as ChatMessageMetadata | undefined)?.selectionContext
+          const selectionContext =
+            bodyRecord.selectionContext ??
+            chatRequestContextRef.current.pendingSelectionContext ??
+            metadataSelection ??
+            editorContext?.selection
+
           const hasPriorAssistantMessage = messages.some((message) => message.role === 'assistant')
           const shouldIncludeCurrentCode =
             hasPriorAssistantMessage ||
             Boolean(bodyRecord.repairContext) ||
-            Boolean(editorContext?.selection)
+            Boolean(selectionContext)
 
           const currentCode = shouldIncludeCurrentCode
             ? editorContext?.code ||
@@ -487,11 +527,13 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
               getPreviousGenerationCode(messages, chatRequestContextRef.current.currentSnippets)
             : undefined
 
+          chatRequestContextRef.current.pendingSelectionContext = undefined
+
           return {
             body: {
               ...body,
               currentCode: currentCode || undefined,
-              selectionContext: editorContext?.selection,
+              selectionContext,
               messages: stripStrudelCodeFromMessages(messages),
             },
           }
@@ -533,13 +575,35 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   }, [saveContextRef, messages])
 
   useEffect(() => {
+    if (status === 'submitted') {
+      const editorContext = chatRequestContextRef.current.getEditorContext?.()
+      const existingCode =
+        editorContext?.code?.trim() ||
+        chatRequestContextRef.current.currentSnippets?.[0]?.code?.trim()
+      hadExistingCodeAtGenerationStartRef.current = Boolean(existingCode)
+      if (hadExistingCodeAtGenerationStartRef.current) {
+        pushSnippets([], { streaming: true, streamingOnly: true })
+      }
+      return
+    }
+
+    if (status === 'ready') {
+      hadExistingCodeAtGenerationStartRef.current = false
+    }
+
     if (status === 'streaming') {
       const lastMessage = messages[messages.length - 1]
       if (lastMessage?.role === 'assistant') {
         const text = getMessageFullText(lastMessage)
         const code = extractCodeFromMessage(lastMessage)
         if (code) {
-          pushSnippets([{ code }], { streaming: !isStrudelCodeBlockComplete(text) })
+          if (hadExistingCodeAtGenerationStartRef.current) {
+            if (isStrudelCodeBlockComplete(text)) {
+              pushSnippets([{ code }], { streaming: false })
+            }
+          } else {
+            pushSnippets([{ code }], { streaming: !isStrudelCodeBlockComplete(text) })
+          }
         }
       }
       return
@@ -559,7 +623,15 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         const code = extractCodeFromMessage(message)
         if (code) {
           if (code.trim() !== savedCode) {
-            pushSnippets(savedSnippets, { fromChatLoad: true })
+            const alreadyPushedNewerCode =
+              lastPushedCodeRef.current &&
+              lastPushedCodeRef.current !== savedCode
+            if (alreadyPushedNewerCode) {
+              preferSavedSnippetsRef.current = false
+              pushSnippets([{ code }])
+            } else {
+              pushSnippets(savedSnippets, { fromChatLoad: true })
+            }
           }
           return
         }
@@ -743,13 +815,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       const firstUserMessage = visibleMessages.find((m) => m.role === 'user')
       if (!firstUserMessage) return
 
-      const messagesToSave = visibleMessages.map((m) => ({
-        id: String(m.id),
-        role: m.role as 'user' | 'assistant',
-        content: getMessageFullText(m),
-        parts: m.parts,
-        createdAt: ((m as any).createdAt instanceof Date) ? (m as any).createdAt.getTime() : Date.now(),
-      }))
+      const messagesToSave = visibleMessages.map(toChatSaveMessage)
 
       try {
         const snippets = currentSnippets?.[0]?.code?.trim()
@@ -866,9 +932,21 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       await ensureChatCreated(textToSend)
     }
 
+    const selectionToSend = selectionContext ?? getEditorContext?.()?.selection
+
+    chatRequestContextRef.current.pendingSelectionContext = selectionToSend
+
     sendMessage(
-      { text: textToSend },
-      { body: { model: DEFAULT_OPENAI_MODEL } }
+      {
+        text: textToSend,
+        metadata: selectionToSend ? { selectionContext: selectionToSend } : undefined,
+      },
+      {
+        body: {
+          model: DEFAULT_OPENAI_MODEL,
+          selectionContext: selectionToSend,
+        },
+      }
     )
 
     onClearSelection?.()
@@ -1084,7 +1162,11 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                                 return (
                                   <Message key={`${message.id}-${i}`} from={message.role}>
                                     <MessageContent>
-                                      <MessageResponse>{part.text}</MessageResponse>
+                                      {message.role === 'user' ? (
+                                        <UserMessageText message={message} text={part.text} />
+                                      ) : (
+                                        <MessageResponse>{part.text}</MessageResponse>
+                                      )}
                                     </MessageContent>
                                   </Message>
                                 )
@@ -1124,7 +1206,11 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                               return (
                                 <Message from={message.role}>
                                   <MessageContent>
-                                    <MessageResponse>{before}</MessageResponse>
+                                    {message.role === 'user' ? (
+                                      <UserMessageText message={message} text={before} />
+                                    ) : (
+                                      <MessageResponse>{before}</MessageResponse>
+                                    )}
                                   </MessageContent>
                                 </Message>
                               )
@@ -1215,10 +1301,9 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       <PromptInput onSubmit={handleSubmit}>
         {selectionContext && (
           <PromptInputHeader className="px-3 pt-3">
-            <div className="flex items-start gap-2 rounded-md border bg-muted/40 px-3 py-2">
+            <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-muted-foreground">Selected code</p>
-                <p className="mt-1 line-clamp-2 font-mono text-xs">{selectionContext.text}</p>
+                <MessageSelectionContext selection={selectionContext} />
               </div>
               <Button
                 type="button"
