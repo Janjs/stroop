@@ -90,7 +90,7 @@ export function SidebarChatItem({
           className={cn(
             'duration-200 [&>a>span]:truncate-none',
             'group-has-[[data-sidebar=menu-action]]/menu-item:!pr-2',
-            showActions && 'group-has-[[data-sidebar=menu-action]]/menu-item:!pr-12'
+            showActions && 'group-has-[[data-sidebar=menu-action]]/menu-item:!pr-10'
           )}
         >
           <Link href={href} onClick={onNavigate} className="block min-w-0 w-full">
@@ -99,10 +99,10 @@ export function SidebarChatItem({
         </SidebarMenuButton>
 
         <SidebarMenuAction
-          className={cn('right-6', showActions ? 'opacity-100' : 'opacity-0')}
+          className={cn('right-5', showActions ? 'opacity-100' : 'opacity-0')}
           onClick={(e) => void handleTogglePin(e)}
         >
-          <HeartIcon className={cn('size-4', isPinned && 'fill-current')} />
+          <HeartIcon className={cn('size-3.5', isPinned && 'fill-current')} />
           <span className="sr-only">{isPinned ? 'Unfavourite chat' : 'Favourite chat'}</span>
         </SidebarMenuAction>
 
@@ -112,7 +112,7 @@ export function SidebarChatItem({
               className={showActions ? 'opacity-100' : 'opacity-0'}
               onClick={(e) => e.preventDefault()}
             >
-              <MoreVerticalIcon className="size-4" />
+              <MoreVerticalIcon className="size-3.5" />
               <span className="sr-only">Chat options</span>
             </SidebarMenuAction>
           </DropdownMenuTrigger>

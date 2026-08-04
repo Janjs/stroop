@@ -76,7 +76,13 @@ export function useAsyncAction({ action, resetAfter = 1400, onError, onReset }: 
       .then(() => act.current())
       .then(
         (result) => {
-          if (result === false) return
+          if (result === false) {
+            if (!alive.current || id !== runId.current) return
+            clear()
+            phase.current = 'idle'
+            setStatus('idle')
+            return
+          }
           settle('success')
         },
         (error: unknown) => {

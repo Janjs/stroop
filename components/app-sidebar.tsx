@@ -103,11 +103,8 @@ export function AppSidebar() {
       router.push('/')
       return
     }
-    if (pathname.startsWith('/generate')) {
-      router.push(`/generate?new=${Date.now()}`)
-    } else {
-      router.push('/')
-    }
+    if (isMobile) setOpenMobile(false)
+    router.push(`/generate?new=${Date.now()}`)
   }
 
   const handleDeleteChat = async (chatId: Id<'chats'>) => {
@@ -153,7 +150,7 @@ export function AppSidebar() {
                 <div className="flex aspect-square items-center justify-center">
                   <Icons.logo className="size-6.5" />
                 </div>
-                <span className="text-2xl font-outfit">Stroop</span>
+                <span className="text-xl font-outfit">Stroop</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -163,7 +160,7 @@ export function AppSidebar() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <SidebarMenuButton onClick={toggleSidebar}>
-                  <PanelLeftIcon className="size-4" />
+                  <PanelLeftIcon className="size-3.5" />
                   <span>{isCollapsed ? 'Expand' : 'Collapse'}</span>
                 </SidebarMenuButton>
               </TooltipTrigger>
@@ -176,7 +173,7 @@ export function AppSidebar() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <SidebarMenuButton onClick={handleNewChat}>
-                  <PlusIcon className="size-4" />
+                  <PlusIcon className="size-3.5" />
                   <span>New Chat</span>
                 </SidebarMenuButton>
               </TooltipTrigger>
@@ -216,7 +213,7 @@ export function AppSidebar() {
       {!isAuthenticated && (isMobile || !isCollapsed) && (
         <SidebarContent className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-3 px-4 text-center">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               If you want to store your chat history, sign in to pick up where you left off.
             </p>
             <Button onClick={handleSignIn} disabled={isSigningIn} size="sm">

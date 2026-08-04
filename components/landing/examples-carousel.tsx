@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Icons } from '@/components/icons'
 import { cn } from '@/lib/utils'
 import { useTheme } from 'next-themes'
+import { buildStrudelTokenColorRules } from '@/lib/strudel-editor-theme'
 import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
 import {
   playStrudelEditor,
@@ -330,30 +331,18 @@ export default function ExamplesCarousel() {
       const mutedFg = get('--muted-foreground')
       const ring = get('--editor-ring')
       const isDark = resolvedTheme === 'dark'
-      const pastel = (color: string) =>
-        isDark ? `color-mix(in oklab, ${color} 40%, ${fg})` : `color-mix(in oklab, ${color} 70%, ${fg})`
-      const palette = [pastel(primary), pastel(accent), pastel(secondary), pastel(mutedFg), pastel(ring), pastel(fg)]
       const noteHighlightColor = accentFg
       const noteHighlightBg = isDark
         ? `color-mix(in oklab, ${accentFg} 22%, transparent)`
         : `color-mix(in oklab, ${accentFg} 14%, transparent)`
-      const cmTokenChar = '\u037C'
-      const tokenClasses = new Set<string>()
-      for (const sheet of document.styleSheets) {
-        try {
-          for (const rule of sheet.cssRules) {
-            const r = rule as CSSStyleRule
-            if (r.selectorText?.includes(cmTokenChar) && r.style?.color) {
-              r.selectorText.match(new RegExp(`${cmTokenChar}[\\da-zA-Z]+`, 'g'))?.forEach((m) => tokenClasses.add(m))
-            }
-          }
-        } catch (_) {}
-      }
-      let tokenRules = ''
-      let idx = 0
-      tokenClasses.forEach((cls) => {
-        tokenRules += `.strudel-example-editor .cm-editor .${cls}{color:${palette[idx % palette.length]} !important;}`
-        idx += 1
+      const tokenRules = buildStrudelTokenColorRules(['.strudel-example-editor'], {
+        isDark,
+        fg,
+        mutedFg,
+        primary,
+        accent,
+        secondary,
+        ring,
       })
       const id = 'strudel-example-theme'
       let styleEl = document.getElementById(id) as HTMLStyleElement | null

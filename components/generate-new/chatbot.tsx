@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type MutableRefObject } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import { StrudelSnippet, EditorContext, EditorSelectionContext } from '@/types/types'
@@ -326,7 +326,6 @@ interface ChatbotProps {
   onSnippetsGenerated?: (snippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean }) => void
   onToolError?: (message: string) => void
   onChatCreated?: (chatId: string) => void
-  compileError?: { message: string; code: string; id: number } | null
   fixRequest?: { message: string; code: string; id: number } | null
   resetKey?: string | null
   onToolClick?: (toolName: string, output: any) => void
@@ -334,9 +333,34 @@ interface ChatbotProps {
   getEditorContext?: () => EditorContext
   selectionContext?: EditorSelectionContext | null
   onClearSelection?: () => void
+  saveContextRef?: MutableRefObject<ChatSaveContext | null>
+  pendingChatNavigationRef?: MutableRefObject<string | null>
+  onChatStatusChange?: (status: 'ready' | 'streaming' | 'submitted' | 'error') => void
 }
 
-function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection }: ChatbotProps) {
+export type ChatSaveMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  parts?: unknown
+  createdAt: number
+}
+
+export type ChatSaveContext = {
+  getMessages: () => ChatSaveMessage[]
+}
+
+function serializeChatMessages(messages: any[]): ChatSaveMessage[] {
+  return messages.map((message) => ({
+    id: String(message.id),
+    role: message.role as 'user' | 'assistant',
+    content: getMessageFullText(message),
+    parts: message.parts,
+    createdAt: message.createdAt instanceof Date ? message.createdAt.getTime() : Date.now(),
+  }))
+}
+
+function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection, saveContextRef, pendingChatNavigationRef, onChatStatusChange }: ChatbotProps) {
   const [selectedMood, setSelectedMood] = useState<string | null>(null)
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
@@ -346,18 +370,16 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const handledToolCallIdsRef = useRef(new Set<string>())
   const currentChatIdRef = useRef<string | null>(chatId || null)
   const pendingNavigationChatIdRef = useRef<string | null>(null)
+  const savedSessionChatIdRef = useRef<string | null>(null)
   const isCreatingChatRef = useRef(false)
   const [sessionKey, setSessionKey] = useState(() => chatId ?? resetKey ?? 'new')
   const lastSavedMessagesLengthRef = useRef<number>(0)
   const lastSubmittedPromptRef = useRef<string | null>(null)
-  const lastHandledCompileErrorIdRef = useRef<number | null>(null)
-  const compileRetryCountRef = useRef(0)
-  const totalCompileRetryCountRef = useRef(0)
-  const lastCompileErrorCodeRef = useRef<string | null>(null)
   const lastSnippetScopeKeyRef = useRef<string | null>(null)
 
   const lastPushedCodeRef = useRef<string | null>(null)
   const isLoadingChatRef = useRef(false)
+  const preferSavedSnippetsRef = useRef(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(false)
   const wasWaitingForResponseRef = useRef(false)
@@ -370,11 +392,19 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   onToolErrorRef.current = onToolError
   const onToolClickRef = useRef(onToolClick)
   onToolClickRef.current = onToolClick
+  const onChatStatusChangeRef = useRef(onChatStatusChange)
+  onChatStatusChangeRef.current = onChatStatusChange
 
   const pushSnippets = useCallback((snippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean }) => {
     const code = snippets[0]?.code?.trim()
     if (!code) return
     if (!options?.fromChatLoad && !options?.streaming && code === lastPushedCodeRef.current) return
+
+    if (options?.fromChatLoad) {
+      preferSavedSnippetsRef.current = true
+    } else if (options?.streaming) {
+      preferSavedSnippetsRef.current = false
+    }
 
     if (!options?.streaming) {
       lastPushedCodeRef.current = code
@@ -423,7 +453,9 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   }, [isAuthenticated, chatId, createChat, updateChat, onChatCreated, router])
   const existingChat = useQuery(
     api.chats.get,
-    chatId && isAuthenticated ? { id: chatId as Id<'chats'> } : 'skip'
+    chatId && (isAuthenticated || anonymousSessionId)
+      ? { id: chatId as Id<'chats'>, sessionId: anonymousSessionId ?? undefined }
+      : 'skip',
   )
 
   const { textInput } = usePromptInputController()
@@ -490,10 +522,18 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   messagesRef.current = messages
 
   useEffect(() => {
-    const visibleUserCount = messages.filter((m) => m.role === 'user' && !isHiddenMessage(m)).length
-    const isFirstGeneration = visibleUserCount <= 1
+    onChatStatusChangeRef.current?.(status)
+  }, [status])
 
-    if (status === 'streaming' && isFirstGeneration) {
+  useEffect(() => {
+    if (!saveContextRef) return
+    saveContextRef.current = {
+      getMessages: () => serializeChatMessages(messagesRef.current),
+    }
+  }, [saveContextRef, messages])
+
+  useEffect(() => {
+    if (status === 'streaming') {
       const lastMessage = messages[messages.length - 1]
       if (lastMessage?.role === 'assistant') {
         const text = getMessageFullText(lastMessage)
@@ -505,11 +545,25 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       return
     }
 
-    if (status === 'streaming') return
-
     if (isLoadingChatRef.current) {
       isLoadingChatRef.current = false
       return
+    }
+
+    const savedSnippets = existingChat?.snippets
+    const savedCode = savedSnippets?.[0]?.code?.trim()
+    if (preferSavedSnippetsRef.current && savedCode) {
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const message = messages[i]
+        if (!message || message.role !== 'assistant') continue
+        const code = extractCodeFromMessage(message)
+        if (code) {
+          if (code.trim() !== savedCode) {
+            pushSnippets(savedSnippets, { fromChatLoad: true })
+          }
+          return
+        }
+      }
     }
 
     const snippetScopeKey = `${chatId || 'new'}:${resetKey || 'none'}`
@@ -527,10 +581,19 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         return
       }
     }
-  }, [messages, chatId, resetKey, status, pushSnippets])
+  }, [messages, chatId, resetKey, status, pushSnippets, existingChat?.snippets])
 
   useEffect(() => {
     if (!chatId) return
+
+    if (pendingChatNavigationRef?.current === chatId) {
+      pendingChatNavigationRef.current = null
+      pendingNavigationChatIdRef.current = null
+      currentChatIdRef.current = chatId
+      savedSessionChatIdRef.current = chatId
+      lastSavedMessagesLengthRef.current = messagesRef.current.filter((m) => !isHiddenMessage(m)).length
+      return
+    }
 
     if (pendingNavigationChatIdRef.current === chatId) {
       pendingNavigationChatIdRef.current = null
@@ -539,12 +602,18 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
 
     if (chatId !== sessionKey) {
+      if (savedSessionChatIdRef.current === chatId) {
+        currentChatIdRef.current = chatId
+        return
+      }
+      savedSessionChatIdRef.current = null
       stopRef.current()
       currentChatIdRef.current = chatId
       lastSavedMessagesLengthRef.current = 0
+      preferSavedSnippetsRef.current = false
       setSessionKey(chatId)
     }
-  }, [chatId, sessionKey])
+  }, [chatId, sessionKey, pendingChatNavigationRef])
 
   useEffect(() => {
     if (chatId || resetKey || pendingNavigationChatIdRef.current) return
@@ -611,51 +680,6 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
   }, [externalPrompt, status, sendMessage, messages.length, chatId, ensureChatCreated])
 
-  useEffect(() => {
-    const MAX_RETRIES_PER_CODE = 2
-    const MAX_TOTAL_RETRIES = 5
-
-    if (!compileError || status !== 'ready') return
-    if (lastHandledCompileErrorIdRef.current === compileError.id) return
-    if (totalCompileRetryCountRef.current >= MAX_TOTAL_RETRIES) return
-    if (lastCompileErrorCodeRef.current === compileError.code && compileRetryCountRef.current >= MAX_RETRIES_PER_CODE) {
-      return
-    }
-    lastHandledCompileErrorIdRef.current = compileError.id
-    if (lastCompileErrorCodeRef.current !== compileError.code) {
-      lastCompileErrorCodeRef.current = compileError.code
-      compileRetryCountRef.current = 0
-    }
-    compileRetryCountRef.current += 1
-    totalCompileRetryCountRef.current += 1
-
-    const currentMessages = messagesRef.current
-    const lastUserMessage = [...currentMessages]
-      .reverse()
-      .find((message) => message?.role === 'user' && !isHiddenMessage(message))
-    const lastUserText =
-      (lastUserMessage && 'content' in lastUserMessage ? String((lastUserMessage as any).content || '') : '') ||
-      lastSubmittedPromptRef.current ||
-      externalPrompt ||
-      ''
-    sendMessage(
-      { text: 'Please fix the compilation error.', metadata: { hidden: true } },
-      {
-        body: {
-          model: DEFAULT_OPENAI_MODEL,
-          repairContext: {
-            type: 'compile',
-            error: compileError.message,
-            code: compileError.code,
-            originalRequest: lastUserText || undefined,
-            attempt: totalCompileRetryCountRef.current,
-            maxAttempts: MAX_TOTAL_RETRIES,
-          },
-        },
-      }
-    )
-  }, [compileError, status, externalPrompt, sendMessage])
-
   const lastHandledFixRequestIdRef = useRef<number | null>(null)
   useEffect(() => {
     if (!fixRequest || status !== 'ready') return
@@ -663,7 +687,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     lastHandledFixRequestIdRef.current = fixRequest.id
 
     sendMessage(
-      { text: 'Fix syntax error', metadata: { hidden: true } },
+      { text: 'Fix the syntax error in my code' },
       {
         body: {
           model: DEFAULT_OPENAI_MODEL,
@@ -697,9 +721,6 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       setSelectedGenre(null)
       setSelectedTempo(null)
       lastSubmittedPromptRef.current = null
-      compileRetryCountRef.current = 0
-      totalCompileRetryCountRef.current = 0
-      lastCompileErrorCodeRef.current = null
     }
   }, [resetKey, textInput])
 
@@ -731,7 +752,9 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       }))
 
       try {
-        const snippets = extractSnippetsFromMessages(messagesToSave)
+        const snippets = currentSnippets?.[0]?.code?.trim()
+          ? currentSnippets
+          : extractSnippetsFromMessages(messagesToSave)
 
         if (currentChatIdRef.current) {
           await updateChat({
@@ -749,7 +772,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
 
     saveChat()
-  }, [messages, status, isAuthenticated, updateChat])
+  }, [messages, status, isAuthenticated, updateChat, currentSnippets])
 
   const constructPrompt = () => {
     const parts: string[] = []
@@ -827,9 +850,6 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
 
     setError(null)
-    compileRetryCountRef.current = 0
-    totalCompileRetryCountRef.current = 0
-    lastCompileErrorCodeRef.current = null
     const textToSend = message.text || constructPrompt()
     console.log('Sending message:', textToSend)
 
@@ -1235,7 +1255,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   )
 }
 
-export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, compileError, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection }: ChatbotProps) {
+export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection, saveContextRef, pendingChatNavigationRef, onChatStatusChange }: ChatbotProps) {
   return (
     <PromptInputProvider>
       <ChatbotContent
@@ -1244,7 +1264,6 @@ export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolErr
         onSnippetsGenerated={onSnippetsGenerated}
         onToolError={onToolError}
         onChatCreated={onChatCreated}
-        compileError={compileError}
         fixRequest={fixRequest}
         resetKey={resetKey}
         onToolClick={onToolClick}
@@ -1252,6 +1271,9 @@ export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolErr
         getEditorContext={getEditorContext}
         selectionContext={selectionContext}
         onClearSelection={onClearSelection}
+        saveContextRef={saveContextRef}
+        pendingChatNavigationRef={pendingChatNavigationRef}
+        onChatStatusChange={onChatStatusChange}
       />
     </PromptInputProvider>
   )

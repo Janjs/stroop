@@ -1,10 +1,11 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { EditorSelectionContext, StrudelSnippet } from '@/types/types'
 import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Icons } from '@/components/icons'
-import Chatbot from '@/components/generate-new/chatbot'
+import Chatbot, { type ChatSaveContext } from '@/components/generate-new/chatbot'
 import { ChatTitleLabel } from '@/components/chat-title-label'
 import { useSearchParams } from 'next/navigation'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
@@ -16,10 +17,10 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
-import { useConvexAuth, useQuery } from 'convex/react'
+import { useConvexAuth, useQuery, useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
-import { DEFAULT_CHAT_TITLE } from '@/lib/chat-title'
+import { DEFAULT_CHAT_TITLE, generateChatTitleFromCode } from '@/lib/chat-title'
 import { useAnonymousSession } from '@/hooks/useAnonymousSession'
 
 export const dynamic = 'force-dynamic'
@@ -27,12 +28,13 @@ export const dynamic = 'force-dynamic'
 const GenerateContent = () => {
   const [snippets, setSnippets] = useState<StrudelSnippet[]>([])
   const [isCodeStreaming, setIsCodeStreaming] = useState(false)
+  const [chatStatus, setChatStatus] = useState<'ready' | 'streaming' | 'submitted' | 'error'>('ready')
   const [error, setError] = useState<string | null>(null)
-  const [compileError, setCompileError] = useState<{ message: string; code: string; id: number } | null>(null)
   const [fixRequest, setFixRequest] = useState<{ message: string; code: string; id: number } | null>(null)
   const [selectionContext, setSelectionContext] = useState<EditorSelectionContext | null>(null)
   const editorRef = useRef<StrudelCodeViewerHandle>(null)
   const searchParams = useSearchParams()
+  const router = useRouter()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isTitleHovered, setIsTitleHovered] = useState(false)
@@ -43,6 +45,8 @@ const GenerateContent = () => {
   const title = searchParams.get('title') || undefined
   const { isAuthenticated } = useConvexAuth()
   const anonymousSessionId = useAnonymousSession()
+  const createChat = useMutation(api.chats.create)
+  const updateChat = useMutation(api.chats.update)
   const chat = useQuery(
     api.chats.get,
     chatId && (isAuthenticated || anonymousSessionId)
@@ -57,25 +61,37 @@ const GenerateContent = () => {
   const prevNewParamRef = useRef<string | null>(null)
   const hasInitializedRef = useRef(false)
   const newParam = searchParams.get('new')
-  const viewerKey = chatId ?? newParam ?? 'none'
+  const [editorSessionKey, setEditorSessionKey] = useState(() => `editor-${Date.now()}`)
   const hydratedChatSnippetsRef = useRef(false)
+  const pendingSaveAfterFixRef = useRef(false)
+  const preFixCodeRef = useRef<string | null>(null)
+  const chatSaveContextRef = useRef<ChatSaveContext | null>(null)
+  const pendingChatNavigationRef = useRef<string | null>(null)
+  const pendingNavigationCodeRef = useRef<string | null>(null)
+  const [persistedCode, setPersistedCode] = useState<string | null>(null)
 
   useEffect(() => {
+    if (pendingChatNavigationRef.current === chatId) return
     hydratedChatSnippetsRef.current = false
   }, [chatId])
 
   useEffect(() => {
     if (hasInitializedRef.current) {
-      const isCreatedChat = createdChatIdRef.current === chatId
-      const isChatChange = prevChatIdRef.current !== chatId && !isCreatedChat
+      const isSaveNavigation =
+        pendingChatNavigationRef.current === chatId ||
+        createdChatIdRef.current === chatId
+      const isChatChange = prevChatIdRef.current !== chatId && !isSaveNavigation
       const isReset = newParam && newParam !== prevNewParamRef.current
       if (isChatChange || isReset) {
         setSnippets([])
+        setPersistedCode(null)
         setIsCodeStreaming(false)
         setError(null)
-        setCompileError(null)
         setFixRequest(null)
         setSelectionContext(null)
+        if (isReset) {
+          setEditorSessionKey(`editor-${Date.now()}`)
+        }
       }
     } else {
       hasInitializedRef.current = true
@@ -83,8 +99,31 @@ const GenerateContent = () => {
 
     prevChatIdRef.current = chatId
     prevNewParamRef.current = newParam
-    createdChatIdRef.current = undefined
+    if (createdChatIdRef.current !== chatId) {
+      createdChatIdRef.current = undefined
+    }
   }, [chatId, newParam])
+
+  useEffect(() => {
+    const code = snippets[0]?.code?.trim()
+    if (code) {
+      setPersistedCode(code)
+    }
+  }, [snippets])
+
+  useEffect(() => {
+    if (!chatId || !pendingNavigationCodeRef.current) return
+
+    const code = pendingNavigationCodeRef.current
+    pendingNavigationCodeRef.current = null
+    setPersistedCode(code)
+    setSnippets([{ code }])
+    hydratedChatSnippetsRef.current = true
+
+    window.requestAnimationFrame(() => {
+      editorRef.current?.applyCode(code)
+    })
+  }, [chatId])
 
   useEffect(() => {
     if (!chatId || !chat?.snippets?.length || isCodeStreaming) return
@@ -93,7 +132,30 @@ const GenerateContent = () => {
     if (!next[0]?.code?.trim()) return
     hydratedChatSnippetsRef.current = true
     setSnippets(next)
+    if (next[0]?.code?.trim()) {
+      setPersistedCode(next[0].code.trim())
+    }
   }, [chatId, chat?.snippets, isCodeStreaming])
+
+  useEffect(() => {
+    if (!pendingSaveAfterFixRef.current) return
+    if (chatStatus !== 'ready' || isCodeStreaming) return
+
+    const code = snippets[0]?.code?.trim()
+    if (!code) return
+
+    if (preFixCodeRef.current && code === preFixCodeRef.current) return
+
+    pendingSaveAfterFixRef.current = false
+    preFixCodeRef.current = null
+    const codeToSave = code
+
+    window.requestAnimationFrame(() => {
+      void editorRef.current?.saveWithCode(codeToSave).catch((error) => {
+        console.error('Failed to auto-save after fix:', error)
+      })
+    })
+  }, [snippets, isCodeStreaming, chatStatus])
 
   const handleSnippetsGenerated = useCallback((newSnippets: StrudelSnippet[], options?: { fromChatLoad?: boolean; streaming?: boolean }) => {
     const fromChatLoad = options?.fromChatLoad ?? false
@@ -106,7 +168,6 @@ const GenerateContent = () => {
     })
     setError(null)
     userDismissedDrawerRef.current = false
-    setCompileError(null)
     setFixRequest(null)
 
     if (isMobile && !fromChatLoad && newSnippets.some((snippet) => Boolean(snippet.code?.trim()))) {
@@ -120,11 +181,9 @@ const GenerateContent = () => {
     setError(message)
   }, [])
 
-  const handleCompileError = useCallback((message: string, code: string) => {
-    setCompileError({ message, code, id: Date.now() })
-  }, [])
-
   const handleFixInChat = useCallback((message: string, code: string) => {
+    pendingSaveAfterFixRef.current = true
+    preFixCodeRef.current = code.trim()
     setFixRequest({ message, code, id: Date.now() })
   }, [])
 
@@ -138,11 +197,56 @@ const GenerateContent = () => {
   }, [])
 
   const handleCodeSaved = useCallback((code: string) => {
+    setPersistedCode(code)
     setSnippets((current) => {
       const activeSnippet = current[0]
       return [{ ...activeSnippet, code }]
     })
+    window.requestAnimationFrame(() => {
+      editorRef.current?.applyCode(code)
+    })
   }, [])
+
+  const handleChatCreated = useCallback((id: string) => {
+    createdChatIdRef.current = id
+  }, [])
+
+  const handleEnsureChatForSave = useCallback(async (code: string) => {
+    if (chatId) return
+
+    if (!isAuthenticated && !anonymousSessionId) {
+      throw new Error('Sign in to save your code to a new chat')
+    }
+
+    const messages = chatSaveContextRef.current?.getMessages() ?? []
+    const snippet = { ...(snippets[0] ?? {}), code }
+
+    const newChatId = await createChat({
+      title: DEFAULT_CHAT_TITLE,
+      messages,
+      snippets: [snippet],
+      sessionId: anonymousSessionId ?? undefined,
+    })
+
+    pendingChatNavigationRef.current = newChatId
+    pendingNavigationCodeRef.current = code
+    createdChatIdRef.current = newChatId
+    handleChatCreated(newChatId)
+    setPersistedCode(code)
+    setSnippets([snippet])
+    hydratedChatSnippetsRef.current = true
+    router.replace(`/generate?chatId=${newChatId}`, { scroll: false })
+
+    void generateChatTitleFromCode(code).then((title) => {
+      if (title !== DEFAULT_CHAT_TITLE) {
+        void updateChat({
+          id: newChatId as Id<'chats'>,
+          title,
+          sessionId: anonymousSessionId ?? undefined,
+        })
+      }
+    })
+  }, [chatId, isAuthenticated, anonymousSessionId, snippets, createChat, updateChat, router, handleChatCreated])
 
   const handleClearSelection = useCallback(() => {
     setSelectionContext(null)
@@ -162,14 +266,15 @@ const GenerateContent = () => {
   const codeViewer = (
     <StrudelCodeViewer
       ref={editorRef}
-      key={viewerKey}
+      key={editorSessionKey}
       snippets={snippets}
+      persistedCode={persistedCode}
       isCodeStreaming={isCodeStreaming}
-      isLoading={isChatLoading || (snippets.length === 0 && !!prompt && !error)}
-      onCompileError={handleCompileError}
+      isLoading={isChatLoading || (snippets.length === 0 && !persistedCode && !!prompt && !error)}
       onFixInChat={handleFixInChat}
       onAddSelectionToContext={handleAddSelectionToContext}
       onCodeSaved={handleCodeSaved}
+      onEnsureChat={handleEnsureChatForSave}
       resetKey={searchParams.get('new')}
       chatId={chatId}
       shareTitle={searchParams.get('title') || prompt}
@@ -199,8 +304,7 @@ const GenerateContent = () => {
         chatId={chatId}
         onSnippetsGenerated={handleSnippetsGenerated}
         onToolError={handleToolError}
-        onChatCreated={(id) => { createdChatIdRef.current = id }}
-        compileError={compileError}
+        onChatCreated={handleChatCreated}
         fixRequest={fixRequest}
         resetKey={searchParams.get('new')}
         onToolClick={handleToolClick}
@@ -208,6 +312,9 @@ const GenerateContent = () => {
         getEditorContext={getEditorContext}
         selectionContext={selectionContext}
         onClearSelection={handleClearSelection}
+        saveContextRef={chatSaveContextRef}
+        pendingChatNavigationRef={pendingChatNavigationRef}
+        onChatStatusChange={setChatStatus}
       />
     </>
   )

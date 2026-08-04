@@ -5,17 +5,23 @@ export const maxDuration = 10
 
 export async function POST(req: Request) {
   try {
-    const { prompt }: { prompt: string } = await req.json()
+    const { prompt, code }: { prompt?: string; code?: string } = await req.json()
+    const source = code?.trim() || prompt?.trim()
 
-    if (!prompt?.trim()) {
+    if (!source) {
       return Response.json({ title: 'New chat' })
     }
 
     const { text } = await generateText({
       model: openai('gpt-4o-mini'),
-      prompt: `Generate a short, descriptive title (3-6 words max) for a music generation chat that started with this prompt. Return ONLY the title, no quotes or punctuation at the end.
+      prompt: code?.trim()
+        ? `Generate a short, descriptive title (3-6 words max) for a Strudel live coding music pattern. Return ONLY the title, no quotes or punctuation at the end.
 
-Prompt: ${prompt.trim()}`,
+Strudel code:
+${source}`
+        : `Generate a short, descriptive title (3-6 words max) for a music generation chat that started with this prompt. Return ONLY the title, no quotes or punctuation at the end.
+
+Prompt: ${source}`,
     })
 
     const title = text.trim().replace(/^["']|["']$/g, '') || 'New chat'

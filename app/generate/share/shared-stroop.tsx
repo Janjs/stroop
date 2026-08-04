@@ -12,6 +12,7 @@ import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useTheme } from 'next-themes'
+import { buildStrudelTokenColorRules } from '@/lib/strudel-editor-theme'
 import { Icons } from '@/components/icons'
 
 type StrudelEditorElement = HTMLElement & {
@@ -86,28 +87,17 @@ function SharedStroop() {
     const secondary = get('--secondary')
     const accent = get('--editor-accent')
     const ring = get('--editor-ring')
-    const pastel = (color: string) => isDark
-      ? `color-mix(in oklab, ${color} 40%, ${fg})`
-      : `color-mix(in oklab, ${color} 70%, ${fg})`
-    const palette = isDark
-      ? [pastel(primary), pastel(accent), pastel(secondary), pastel(mutedFg), pastel(ring), pastel(fg)]
-      : [fg, primary, mutedFg, `color-mix(in oklab, ${primary} 55%, ${fg})`]
-    const tokenClasses = new Set<string>()
-    for (const sheet of document.styleSheets) {
-      try {
-        for (const rule of sheet.cssRules) {
-          const cssRule = rule as CSSStyleRule
-          if (cssRule.selectorText?.includes('\u037C') && cssRule.style?.color) {
-            cssRule.selectorText.match(/\u037C[\da-zA-Z]+/g)?.forEach((name) => tokenClasses.add(name))
-          }
-        }
-      } catch {}
-    }
     const style = document.createElement('style')
     style.id = 'strudel-shared-page-theme'
-    style.textContent = Array.from(tokenClasses)
-      .map((name, index) => `.strudel-share-preview .cm-editor .${name}{color:${palette[index % palette.length]} !important;}`)
-      .join('')
+    style.textContent = buildStrudelTokenColorRules(['.strudel-share-preview'], {
+      isDark,
+      fg,
+      mutedFg,
+      primary,
+      accent,
+      secondary,
+      ring,
+    })
     document.head.appendChild(style)
     return () => style.remove()
   }, [isReady, resolvedTheme])

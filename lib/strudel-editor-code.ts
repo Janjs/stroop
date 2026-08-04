@@ -13,6 +13,7 @@ type EditorViewLike = {
   ) => { left: number; right: number; top: number; bottom: number } | null
   scrollDOM?: HTMLElement
   dom?: HTMLElement
+  contentDOM?: HTMLElement
   dispatch: (spec: {
     changes: { from: number; to: number; insert: string }
     annotations?: unknown[]
@@ -180,11 +181,16 @@ export function subscribeStrudelEditorChanges(
   }
 
   const editorSurface = getEditorSurface(container)
-  const targets = [editorSurface, container.querySelector('.cm-content'), container.querySelector('.cm-editor')].filter(
-    Boolean,
-  ) as HTMLElement[]
+  const contentDOM = repl?.editor?.editor?.contentDOM
+  const targets = [
+    editorSurface,
+    contentDOM,
+    container.querySelector('.cm-content'),
+    container.querySelector('.cm-editor'),
+  ].filter(Boolean) as HTMLElement[]
 
   for (const target of targets) {
+    target.addEventListener('input', notify)
     target.addEventListener('keyup', notify)
     target.addEventListener('paste', notify)
     target.addEventListener('cut', notify)
@@ -193,6 +199,7 @@ export function subscribeStrudelEditorChanges(
   return () => {
     window.cancelAnimationFrame(frameId)
     for (const target of targets) {
+      target.removeEventListener('input', notify)
       target.removeEventListener('keyup', notify)
       target.removeEventListener('paste', notify)
       target.removeEventListener('cut', notify)

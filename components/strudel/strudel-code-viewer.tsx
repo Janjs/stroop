@@ -30,6 +30,7 @@ import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
 import { useAnonymousSession } from '@/hooks/useAnonymousSession'
 import { cn } from '@/lib/utils'
+import { buildStrudelTokenColorRules } from '@/lib/strudel-editor-theme'
 import {
   Dialog,
   DialogContent,
@@ -41,16 +42,20 @@ import {
 export type StrudelCodeViewerHandle = {
   getCurrentCode: () => string
   getSelection: () => EditorSelectionContext | null
+  save: () => Promise<boolean>
+  saveWithCode: (code: string) => Promise<boolean>
+  applyCode: (code: string) => void
 }
 
 interface StrudelCodeViewerProps {
   snippets: StrudelSnippet[]
+  persistedCode?: string | null
   isCodeStreaming?: boolean
   isLoading?: boolean
-  onCompileError?: (message: string, code: string) => void
   onFixInChat?: (message: string, code: string) => void
   onAddSelectionToContext?: (selection: EditorSelectionContext) => void
   onCodeSaved?: (code: string) => void
+  onEnsureChat?: (code: string) => Promise<void>
   resetKey?: string | null
   chatId?: string
   shareTitle?: string
@@ -127,11 +132,12 @@ const getErrorRange = (error: unknown, code: string) => {
 }
 
 const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerProps>(function StrudelCodeViewer(
-  { snippets, isCodeStreaming = false, isLoading = false, onCompileError, onFixInChat, onAddSelectionToContext, onCodeSaved, resetKey, chatId, shareTitle },
+  { snippets, persistedCode = null, isCodeStreaming = false, isLoading = false, onFixInChat, onAddSelectionToContext, onCodeSaved, onEnsureChat, resetKey, chatId, shareTitle },
   ref,
 ) {
   const activeSnippet = snippets[0]
-  const hasSnippet = Boolean(activeSnippet?.code?.trim())
+  const effectiveCode = activeSnippet?.code?.trim() || persistedCode?.trim() || ''
+  const [hasEditorCode, setHasEditorCode] = useState(Boolean(effectiveCode))
   const replRef = useRef<StrudelEditorElement | null>(null)
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const sharePreviewRef = useRef<StrudelEditorElement | null>(null)
@@ -150,6 +156,8 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
   const [isShareOpen, setIsShareOpen] = useState(false)
   const [hasShared, setHasShared] = useState(false)
   const [replError, setReplError] = useState<{ message: string; range?: { from: number; to: number } } | null>(null)
+  const replErrorRef = useRef<{ message: string; range?: { from: number; to: number } } | null>(null)
+  replErrorRef.current = replError
   const copyTimeoutRef = useRef<number | null>(null)
   const saveButtonRef = useRef<LoadingButtonHandle>(null)
   const hasUnsavedChangesRef = useRef(false)
@@ -158,15 +166,12 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
   const isApplyingExternalCodeRef = useRef(false)
   const { resolvedTheme } = useTheme()
   const lastErrorKeyRef = useRef<string | null>(null)
-  const lastCompileErrorKeyRef = useRef<string | null>(null)
   const [fontSize, setFontSize] = useState(14)
   const [selectionUI, setSelectionUI] = useState<EditorSelectionUI | null>(null)
-  const onCompileErrorRef = useRef(onCompileError)
-  onCompileErrorRef.current = onCompileError
   const onAddSelectionToContextRef = useRef(onAddSelectionToContext)
   onAddSelectionToContextRef.current = onAddSelectionToContext
-  const activeCodeRef = useRef(activeSnippet?.code)
-  activeCodeRef.current = activeSnippet?.code
+  const activeCodeRef = useRef(effectiveCode)
+  activeCodeRef.current = effectiveCode
   const lastSetNormalizedCodeRef = useRef<string>('')
   const lastEvaluatedCodeRef = useRef<string>('')
   const lastSavedCodeRef = useRef(activeSnippet?.code || '')
@@ -174,10 +179,15 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
   const makeShareable = useMutation(api.chats.makeShareable)
   const updateChat = useMutation(api.chats.update)
   const anonymousSessionId = useAnonymousSession()
+  const handleSaveCodeRef = useRef<(force?: boolean, codeOverride?: string) => Promise<boolean>>(async () => false)
+  const applyCodeRef = useRef<(code: string) => void>(() => {})
 
   useImperativeHandle(ref, () => ({
     getCurrentCode: () => getCurrentEditorCode(),
     getSelection: () => getStrudelEditorSelection(replRef.current),
+    save: () => handleSaveCodeRef.current(true),
+    saveWithCode: (code: string) => handleSaveCodeRef.current(true, code),
+    applyCode: (code: string) => applyCodeRef.current(code),
   }), [])
 
   useEffect(() => {
@@ -200,6 +210,7 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
     const handleEditorChange = (code: string) => {
       if (isApplyingExternalCodeRef.current) return
       currentEditorCodeRef.current = code
+      setHasEditorCode(Boolean(code.trim()))
       const isDirty = normalizeStrudelCode(code) !== normalizeStrudelCode(lastSavedCodeRef.current)
       setHasUnsavedChanges(isDirty)
       if (!isPlayingRef.current) return
@@ -305,7 +316,6 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
 
   useEffect(() => {
     if (!isEditorReady || !replRef.current) return
-    const cmTokenChar = '\u037C'
     const apply = () => {
       const container = replRef.current?.nextElementSibling as HTMLElement | null
       if (!container?.querySelector('.cm-editor')) return
@@ -333,31 +343,14 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
       const ringColor = get('--editor-ring')
       const lineHeightPx = fontSize * LINE_HEIGHT_RATIO
       const contentBufferPx = BUFFER_LINES * lineHeightPx
-      const pastel = (color: string) => isDark
-        ? `color-mix(in oklab, ${color} 40%, ${fg})`
-        : `color-mix(in oklab, ${color} 70%, ${fg})`
-      const palette = isDark
-        ? [pastel(primary), pastel(accentColor), pastel(secondary), pastel(mutedFg), pastel(ringColor), pastel(fg)]
-        : [fg, primary, mutedFg, `color-mix(in oklab, ${primary} 55%, ${fg})`]
-      const tokenClasses = new Set<string>()
-      for (const sheet of document.styleSheets) {
-        try {
-          for (const rule of sheet.cssRules) {
-            const r = rule as CSSStyleRule
-            if (r.selectorText?.includes(cmTokenChar) && r.style?.color) {
-              const matches = r.selectorText.match(new RegExp(`${cmTokenChar}[\\da-zA-Z]+`, 'g'))
-              matches?.forEach((m) => tokenClasses.add(m))
-            }
-          }
-        } catch (_) {}
-      }
-      let tokenRules = ''
-      let idx = 0
-      tokenClasses.forEach((cls) => {
-        const color = palette[idx % palette.length]
-        tokenRules += `#strudel-repl-container .cm-editor .${cls}{color:${color} !important;}`
-        tokenRules += `.strudel-share-preview .cm-editor .${cls}{color:${color} !important;}`
-        idx += 1
+      const tokenRules = buildStrudelTokenColorRules(['#strudel-repl-container', '.strudel-share-preview'], {
+        isDark,
+        fg,
+        mutedFg,
+        primary,
+        accent: accentColor,
+        secondary,
+        ring: ringColor,
       })
       const selectionBg = isDark
         ? `color-mix(in oklab, ${accent} 18%, transparent)`
@@ -431,7 +424,7 @@ ${tokenRules}
   useEffect(() => {
     const repl = replRef.current
     if (!repl?.editor) return
-    if (!activeSnippet?.code) {
+    if (!effectiveCode) {
       isApplyingExternalCodeRef.current = true
       setStrudelEditorCode(repl, '', { resetHistory: true })
       isApplyingExternalCodeRef.current = false
@@ -442,22 +435,29 @@ ${tokenRules}
       lastEvaluatedCodeRef.current = ''
       lastSavedCodeRef.current = ''
       setHasUnsavedChanges(false)
+      setHasEditorCode(false)
       return
     }
-    const normalizedCode = normalizeStrudelCode(activeSnippet.code)
-    const editorCode = normalizeStrudelCode(getStrudelEditorCode(repl) || currentEditorCodeRef.current)
+    const normalizedCode = normalizeStrudelCode(effectiveCode)
+    const domCode = normalizeStrudelCode(getStrudelEditorCode(repl))
     const codeChanged = normalizedCode !== lastSetNormalizedCodeRef.current
+    const editorMissingCode = Boolean(normalizedCode.trim()) && !domCode.trim()
 
-    if (codeChanged) {
-      if (editorCode === normalizedCode) {
+    if (codeChanged || editorMissingCode) {
+      if (domCode === normalizedCode) {
         lastSetNormalizedCodeRef.current = normalizedCode
         currentEditorCodeRef.current = normalizedCode
-        lastSavedCodeRef.current = normalizedCode
-        setHasUnsavedChanges(false)
+        if (chatId) {
+          lastSavedCodeRef.current = normalizedCode
+          setHasUnsavedChanges(false)
+        } else {
+          setHasUnsavedChanges(Boolean(normalizedCode.trim()))
+        }
+        setHasEditorCode(Boolean(normalizedCode.trim()))
       } else {
         const previousCode = lastSetNormalizedCodeRef.current
         isApplyingExternalCodeRef.current = true
-        if (previousCode) {
+        if (previousCode && previousCode !== normalizedCode && !editorMissingCode) {
           updateStrudelEditorCode(repl, normalizedCode, previousCode)
         } else {
           setStrudelEditorCode(repl, normalizedCode)
@@ -465,8 +465,13 @@ ${tokenRules}
         isApplyingExternalCodeRef.current = false
         lastSetNormalizedCodeRef.current = normalizedCode
         currentEditorCodeRef.current = normalizedCode
-        lastSavedCodeRef.current = normalizedCode
-        setHasUnsavedChanges(false)
+        if (chatId) {
+          lastSavedCodeRef.current = normalizedCode
+          setHasUnsavedChanges(false)
+        } else {
+          setHasUnsavedChanges(Boolean(normalizedCode.trim()))
+        }
+        setHasEditorCode(Boolean(normalizedCode.trim()))
       }
     }
 
@@ -486,7 +491,7 @@ ${tokenRules}
         }
       })
     })
-  }, [activeSnippet?.code, isEditorReady, isCodeStreaming])
+  }, [effectiveCode, isEditorReady, isCodeStreaming, chatId])
 
   useEffect(() => {
     const repl = replRef.current
@@ -499,20 +504,12 @@ ${tokenRules}
     lastEvaluatedCodeRef.current = ''
     lastSavedCodeRef.current = ''
     setHasUnsavedChanges(false)
+    setHasEditorCode(false)
   }, [resetKey])
 
   useEffect(() => {
     setReplError(null)
-    lastCompileErrorKeyRef.current = null
   }, [activeSnippet?.code])
-
-  useEffect(() => {
-    if (!replError || !activeCodeRef.current || !onCompileErrorRef.current) return
-    const errorKey = `${replError.message}:${activeCodeRef.current}`
-    if (lastCompileErrorKeyRef.current === errorKey) return
-    lastCompileErrorKeyRef.current = errorKey
-    onCompileErrorRef.current(replError.message, activeCodeRef.current)
-  }, [replError])
 
   useEffect(() => {
     const repl = replRef.current
@@ -522,6 +519,7 @@ ${tokenRules}
       const error = detail?.error
       if (!error) {
         lastErrorKeyRef.current = null
+        replErrorRef.current = null
         setReplError(null)
         return
       }
@@ -535,7 +533,9 @@ ${tokenRules}
       const errorKey = `${message}:${range ? `${range.from}-${range.to}` : 'none'}`
       repl.editor?.stop?.()
       setIsPlaying(false)
-      setReplError({ message, range })
+      const nextError = { message, range }
+      replErrorRef.current = nextError
+      setReplError(nextError)
       if (errorKey !== lastErrorKeyRef.current) {
         lastErrorKeyRef.current = errorKey
         if (range) {
@@ -570,28 +570,69 @@ ${tokenRules}
       const fromEditor = getStrudelEditorCode(repl)
       if (fromEditor.trim()) return fromEditor
     }
-    return currentEditorCodeRef.current || activeSnippet?.code || ''
+    return currentEditorCodeRef.current || effectiveCode || ''
   }
 
-  const handleSaveCode = async (): Promise<boolean> => {
-    if (!hasUnsavedChangesRef.current) return false
+  const handleSaveCode = async (force = false, codeOverride?: string): Promise<boolean> => {
+    if (!force && !hasUnsavedChangesRef.current) return false
 
     const repl = replRef.current
-    const code = getCurrentEditorCode()
-    const normalizedCode = normalizeStrudelCode(code)
-    if (!normalizedCode || normalizedCode === normalizeStrudelCode(lastSavedCodeRef.current)) return false
-    if (!chatId) {
-      throw new Error('Save the chat before saving code changes')
+    const rawCode = codeOverride ?? getCurrentEditorCode()
+    const normalizedCode = normalizeStrudelCode(rawCode)
+    if (!normalizedCode) return false
+
+    if (codeOverride && repl?.editor) {
+      isApplyingExternalCodeRef.current = true
+      setStrudelEditorCode(repl, normalizedCode)
+      isApplyingExternalCodeRef.current = false
+      lastSetNormalizedCodeRef.current = normalizedCode
+      currentEditorCodeRef.current = normalizedCode
+      setHasEditorCode(Boolean(normalizedCode.trim()))
     }
+
+    const alreadySavedLocally = normalizedCode === normalizeStrudelCode(lastSavedCodeRef.current)
+    if (!force && alreadySavedLocally) return false
+    if (force && chatId && alreadySavedLocally) return false
 
     if (liveEvaluationTimeoutRef.current !== null) {
       window.clearTimeout(liveEvaluationTimeoutRef.current)
       liveEvaluationTimeoutRef.current = null
     }
     if (isPlayingRef.current) {
-      await evaluateStrudelEditor(repl, false)
+      try {
+        await evaluateStrudelEditor(repl, false)
+      } catch {
+        // Syntax errors are surfaced via the repl update event.
+      }
       lastEvaluatedCodeRef.current = normalizedCode
+    } else {
+      try {
+        await evaluateStrudelEditor(repl, false)
+      } catch {
+        // Syntax errors are surfaced via the repl update event.
+      }
     }
+
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    })
+
+    if (replErrorRef.current) {
+      return false
+    }
+
+    if (!chatId) {
+      if (!onEnsureChat) {
+        throw new Error('Sign in to save your code to a new chat')
+      }
+      await onEnsureChat(normalizedCode)
+      currentEditorCodeRef.current = normalizedCode
+      lastSavedCodeRef.current = normalizedCode
+      setHasUnsavedChanges(false)
+      onCodeSaved?.(normalizedCode)
+      return true
+    }
+
     await updateChat({
       id: chatId as Id<'chats'>,
       snippets: [{ ...(activeSnippet ?? {}), code: normalizedCode }],
@@ -604,8 +645,38 @@ ${tokenRules}
     return true
   }
 
+  handleSaveCodeRef.current = handleSaveCode
+
+  const applyCodeToEditor = (code: string) => {
+    const repl = replRef.current
+    if (!repl?.editor) return false
+    const normalizedCode = normalizeStrudelCode(code)
+    if (!normalizedCode.trim()) return false
+    isApplyingExternalCodeRef.current = true
+    setStrudelEditorCode(repl, normalizedCode)
+    isApplyingExternalCodeRef.current = false
+    lastSetNormalizedCodeRef.current = normalizedCode
+    currentEditorCodeRef.current = normalizedCode
+    lastSavedCodeRef.current = normalizedCode
+    setHasEditorCode(true)
+    setHasUnsavedChanges(false)
+    return true
+  }
+
+  applyCodeRef.current = (code: string) => {
+    if (applyCodeToEditor(code)) return
+
+    let attempts = 0
+    const retry = () => {
+      attempts += 1
+      if (applyCodeToEditor(code) || attempts > 60) return
+      window.requestAnimationFrame(retry)
+    }
+    window.requestAnimationFrame(retry)
+  }
+
   const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!hasUnsavedChanges) return
+    if (!hasUnsavedChanges || replError) return
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
       event.preventDefault()
       saveButtonRef.current?.run()
@@ -613,9 +684,10 @@ ${tokenRules}
   }
 
   const handleCopy = async () => {
-    if (!activeSnippet?.code) return
+    const code = getCurrentEditorCode()
+    if (!code.trim()) return
     try {
-      await navigator.clipboard.writeText(activeSnippet.code)
+      await navigator.clipboard.writeText(code)
       setHasCopied(true)
       if (copyTimeoutRef.current) {
         window.clearTimeout(copyTimeoutRef.current)
@@ -712,7 +784,7 @@ ${tokenRules}
               successLabel="Saved"
               errorLabel="Retry"
               resetAfter={1000}
-              disabled={isCodeStreaming || !hasUnsavedChanges}
+              disabled={isCodeStreaming || !hasUnsavedChanges || Boolean(replError)}
               onError={(error) => console.error('Failed to save Strudel code:', error)}
               onReset={() => {
                 if (!hasUnsavedChangesRef.current) setSaveButtonVisible(false)
@@ -749,12 +821,12 @@ ${tokenRules}
               <Alert variant="destructive" className="py-2 px-3 bg-background">
                 <AlertTitle className="text-xs font-bold">Strudel syntax error</AlertTitle>
                 <AlertDescription className="text-xs break-all line-clamp-3">{replError.message}</AlertDescription>
-                {onFixInChat && activeSnippet?.code && (
+                {onFixInChat && hasEditorCode && (
                   <Button
                     variant="outline"
                     size="sm"
                     className="mt-2 h-6 text-xs gap-1"
-                    onClick={() => onFixInChat(replError.message, activeSnippet.code)}
+                    onClick={() => onFixInChat(replError.message, getCurrentEditorCode())}
                   >
                     <MessageSquare className="h-3 w-3" />
                     Fix in chat
@@ -765,17 +837,17 @@ ${tokenRules}
           ) : null}
           <div className="absolute inset-x-4 bottom-4 z-10 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" className="h-9 w-9 rounded-full bg-background" onClick={handleCopy} aria-label="Copy code" disabled={!hasSnippet}>
+              <Button variant="outline" size="icon" className="h-9 w-9 rounded-full bg-background" onClick={handleCopy} aria-label="Copy code" disabled={!hasEditorCode}>
                 {hasCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               </Button>
-              <Button variant="outline" size="icon" className="h-9 w-9 rounded-full bg-background" onClick={openSharePreview} aria-label="Share output" disabled={!hasSnippet}>
+              <Button variant="outline" size="icon" className="h-9 w-9 rounded-full bg-background" onClick={openSharePreview} aria-label="Share output" disabled={!hasEditorCode}>
                 <Share2 className="h-4 w-4" />
               </Button>
             </div>
             <MorphButton
               active={isPlaying}
               onToggle={() => void handleTogglePlayback()}
-              disabled={!isEditorReady || Boolean(replError) || isCodeStreaming}
+              disabled={!hasEditorCode || !isEditorReady || Boolean(replError) || isCodeStreaming}
               className="h-11 shrink-0 px-5"
             />
             <div className="flex items-center gap-1 rounded-full border bg-background p-0.5">
