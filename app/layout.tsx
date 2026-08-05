@@ -1,4 +1,3 @@
-import { Suspense } from 'react'
 import { cookies } from 'next/headers'
 import Header from './header'
 import './globals.css'
@@ -54,9 +53,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <AppSidebar />
                 <SidebarInset>
                   <div className="h-[100dvh] flex flex-col min-w-0">
-                    <Suspense fallback={null}>
-                      <Header />
-                    </Suspense>
+                    <Header />
                     <div className="flex flex-1 min-h-0 overflow-auto justify-center min-w-0">{children}</div>
                   </div>
                 </SidebarInset>

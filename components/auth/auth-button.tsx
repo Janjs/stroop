@@ -1,6 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { useState } from 'react'
 import { useConvexAuth } from 'convex/react'
 import { useAuthActions } from '@convex-dev/auth/react'
 import { useSignIn } from '@/hooks/useSignIn'
@@ -136,7 +137,34 @@ function UserMenu({
   )
 }
 
-export function AuthButton({ variant = 'header' }: AuthButtonProps) {
+function HeaderAuthButton() {
+  const { isAuthenticated } = useConvexAuth()
+  const { signIn } = useAuthActions()
+  const pathname = usePathname()
+  const [isSigningIn, setIsSigningIn] = useState(false)
+
+  if (isAuthenticated) {
+    return null
+  }
+
+  const handleSignIn = () => {
+    setIsSigningIn(true)
+    void signIn('google', { redirectTo: pathname })
+  }
+
+  return (
+    <div className="flex gap-2 items-center">
+      <About variant="icon" />
+      <ModeToggle />
+      <Button onClick={handleSignIn} disabled={isSigningIn}>
+        {isSigningIn && <Icons.spinner className="animate-spin" />}
+        Sign In
+      </Button>
+    </div>
+  )
+}
+
+function SidebarAuthButton() {
   const { isAuthenticated } = useConvexAuth()
   const { signOut } = useAuthActions()
   const { theme, setTheme } = useTheme()
@@ -159,10 +187,6 @@ export function AuthButton({ variant = 'header' }: AuthButtonProps) {
   }
 
   if (isAuthenticated) {
-    if (variant === 'header') {
-      return null
-    }
-
     const initials =
       user?.name
         ?.split(' ')
@@ -216,14 +240,13 @@ export function AuthButton({ variant = 'header' }: AuthButtonProps) {
     )
   }
 
-  return (
-    <div className="flex gap-2 items-center">
-      <About variant="icon" />
-      <ModeToggle />
-      <Button onClick={handleSignIn} disabled={isSigningIn}>
-        {isSigningIn && <Icons.spinner className="animate-spin" />}
-        Sign In
-      </Button>
-    </div>
-  )
+  return null
+}
+
+export function AuthButton({ variant = 'header' }: AuthButtonProps) {
+  if (variant === 'header') {
+    return <HeaderAuthButton />
+  }
+
+  return <SidebarAuthButton />
 }
