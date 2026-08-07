@@ -8,9 +8,10 @@ import { Icons } from '@/components/icons'
 import Chatbot, { type ChatSaveContext } from '@/components/generate-new/chatbot'
 import { ChatTitleLabel } from '@/components/chat-title-label'
 import { useSearchParams } from 'next/navigation'
-import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { useIsMobile } from '@/hooks/use-mobile'
-import StrudelCodeViewer, { type StrudelCodeViewerHandle } from '@/components/strudel/strudel-code-viewer'
+import StrudelCodeViewer, { type StrudelCodeViewerHandle, type StrudelPlayerState } from '@/components/strudel/strudel-code-viewer'
+import { MobileCodePlayerBar } from '@/components/generate-new/mobile-code-player-bar'
+import { cn } from '@/lib/utils'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import {
   ResizableHandle,
@@ -38,6 +39,11 @@ const GenerateContent = () => {
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isTitleHovered, setIsTitleHovered] = useState(false)
+  const [playerState, setPlayerState] = useState<StrudelPlayerState>({
+    isPlaying: false,
+    hasEditorCode: false,
+    canPlay: false,
+  })
   const userDismissedDrawerRef = useRef(false)
 
   const prompt = searchParams.get('prompt') || undefined
@@ -173,13 +179,7 @@ const GenerateContent = () => {
     setError(null)
     userDismissedDrawerRef.current = false
     setFixRequest(null)
-
-    if (isMobile && !fromChatLoad && newSnippets.some((snippet) => Boolean(snippet.code?.trim()))) {
-      if (!userDismissedDrawerRef.current) {
-        setIsDrawerOpen(true)
-      }
-    }
-  }, [isMobile])
+  }, [])
 
   useEffect(() => {
     if (chatStatus === 'ready' || chatStatus === 'error') {
@@ -270,7 +270,36 @@ const GenerateContent = () => {
         setError(null)
       }
     }
+    userDismissedDrawerRef.current = false
     setIsDrawerOpen(true)
+  }, [])
+
+  const hasGeneratedCode = Boolean(snippets[0]?.code?.trim() || persistedCode?.trim())
+
+  const handleMobileExpandCode = useCallback(() => {
+    userDismissedDrawerRef.current = false
+    setIsDrawerOpen(true)
+  }, [])
+
+  const handleMobileCopy = useCallback(() => {
+    void editorRef.current?.copyCode()
+  }, [])
+
+  const handleMobileShare = useCallback(() => {
+    editorRef.current?.openShare()
+  }, [])
+
+  const handleMobileTogglePlayback = useCallback(async () => {
+    if (!playerState.canPlay) {
+      userDismissedDrawerRef.current = false
+      setIsDrawerOpen(true)
+      return
+    }
+    await editorRef.current?.togglePlayback()
+  }, [playerState.canPlay])
+
+  const handlePlayerStateChange = useCallback((state: StrudelPlayerState) => {
+    setPlayerState(state)
   }, [])
 
   const codeViewer = (
@@ -285,11 +314,25 @@ const GenerateContent = () => {
       onAddSelectionToContext={handleAddSelectionToContext}
       onCodeSaved={handleCodeSaved}
       onEnsureChat={handleEnsureChatForSave}
+      onPlayerStateChange={handlePlayerStateChange}
       resetKey={searchParams.get('new')}
       chatId={chatId}
       shareTitle={searchParams.get('title') || prompt}
     />
   )
+
+  const mobileCodePlayerBar = isMobile && (hasGeneratedCode || isCodeStreaming) ? (
+    <MobileCodePlayerBar
+      isPlaying={playerState.isPlaying}
+      canPlay={playerState.canPlay}
+      hasCode={hasGeneratedCode}
+      isStreaming={isCodeStreaming}
+      onTogglePlayback={() => void handleMobileTogglePlayback()}
+      onCopy={handleMobileCopy}
+      onShare={handleMobileShare}
+      onExpandCode={handleMobileExpandCode}
+    />
+  ) : null
 
   const chatPanel = (
     <>
@@ -325,6 +368,7 @@ const GenerateContent = () => {
         saveContextRef={chatSaveContextRef}
         pendingChatNavigationRef={pendingChatNavigationRef}
         onChatStatusChange={setChatStatus}
+        mobileCodePlayerBar={mobileCodePlayerBar}
       />
     </>
   )
@@ -332,9 +376,32 @@ const GenerateContent = () => {
   return (
     <div className="flex h-full min-h-0 w-full max-w-full flex-1 overflow-hidden p-4">
       {isMobile ? (
-        <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
-          {chatPanel}
-        </div>
+        <>
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+            {chatPanel}
+          </div>
+          <div
+            aria-hidden={!isDrawerOpen}
+            className={cn(
+              'fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[10px] border bg-background shadow-lg transition-[height] duration-300 ease-out',
+              isDrawerOpen ? 'h-[85vh] p-4' : 'pointer-events-none h-0 overflow-hidden border-transparent p-0 opacity-0',
+            )}
+          >
+            <div className={cn('mx-auto mb-4 h-2 w-[100px] shrink-0 rounded-full bg-muted', !isDrawerOpen && 'hidden')} />
+            <div className="min-h-0 flex-1 overflow-hidden">{codeViewer}</div>
+          </div>
+          {isDrawerOpen && (
+            <button
+              type="button"
+              aria-label="Close code viewer"
+              className="fixed inset-0 z-40 bg-black/80"
+              onClick={() => {
+                userDismissedDrawerRef.current = true
+                setIsDrawerOpen(false)
+              }}
+            />
+          )}
+        </>
       ) : (
         <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
           <ResizablePanel
@@ -350,24 +417,6 @@ const GenerateContent = () => {
             {codeViewer}
           </ResizablePanel>
         </ResizablePanelGroup>
-      )}
-
-      {isMobile && (
-        <Drawer 
-          open={isDrawerOpen} 
-          onOpenChange={(open) => {
-            if (!open) {
-              userDismissedDrawerRef.current = true
-            }
-            setIsDrawerOpen(open)
-          }}
-        >
-          <DrawerContent className="h-[85vh] p-4">
-            <div className="h-full overflow-hidden">
-              {codeViewer}
-            </div>
-          </DrawerContent>
-        </Drawer>
       )}
     </div>
   )

@@ -138,12 +138,12 @@ function UserMenu({
 }
 
 function HeaderAuthButton() {
-  const { isAuthenticated } = useConvexAuth()
+  const { isAuthenticated, isLoading } = useConvexAuth()
   const { signIn } = useAuthActions()
   const pathname = usePathname()
   const [isSigningIn, setIsSigningIn] = useState(false)
 
-  if (isAuthenticated) {
+  if (isLoading || isAuthenticated) {
     return null
   }
 

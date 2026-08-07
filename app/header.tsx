@@ -2,13 +2,13 @@
 
 import { usePathname } from 'next/navigation'
 import { AuthButton } from '@/components/auth/auth-button'
-import { Icons } from '@/components/icons'
 import { SidebarTrigger } from '@/components/ui/sidebar'
+import { Icons } from '@/components/icons'
 import Link from 'next/link'
 import { useConvexAuth } from 'convex/react'
 
 export default function Header() {
-  const { isAuthenticated } = useConvexAuth()
+  const { isAuthenticated, isLoading } = useConvexAuth()
   const pathname = usePathname()
   const isLandingPage = pathname === '/'
 
@@ -16,12 +16,15 @@ export default function Header() {
     return null
   }
 
+  const showSignedOutHeader = !isLoading && !isAuthenticated
+  const showMobileSidebarTrigger = !isLoading && (isAuthenticated || !isLandingPage)
+
   return (
     <header className="relative z-10 w-full flex-shrink-0">
       <nav className="flex w-full items-center gap-4 px-4 py-3 min-h-[3.5rem]" aria-label="Global">
         <div className="flex items-center gap-3 min-w-0">
-          {isAuthenticated && <SidebarTrigger className="md:hidden" />}
-          {!isAuthenticated && isLandingPage && (
+          {showMobileSidebarTrigger && <SidebarTrigger className="md:hidden" />}
+          {!isLoading && !isAuthenticated && isLandingPage && (
             <Link href="/" className="flex items-center gap-2 mr-4">
               <div className="flex aspect-square items-center justify-center">
                 <Icons.logo className="size-6.5" />
@@ -30,7 +33,7 @@ export default function Header() {
             </Link>
           )}
         </div>
-        {!isAuthenticated ? (
+        {showSignedOutHeader ? (
           <div className="flex gap-3 ml-auto items-center">
             <AuthButton />
           </div>

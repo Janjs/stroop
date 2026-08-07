@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type MutableRefObject } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, type MutableRefObject, type ReactNode } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport } from 'ai'
 import { StrudelSnippet, EditorContext, EditorSelectionContext, ChatMessageMetadata } from '@/types/types'
@@ -351,6 +351,7 @@ interface ChatbotProps {
   saveContextRef?: MutableRefObject<ChatSaveContext | null>
   pendingChatNavigationRef?: MutableRefObject<string | null>
   onChatStatusChange?: (status: 'ready' | 'streaming' | 'submitted' | 'error') => void
+  mobileCodePlayerBar?: ReactNode
 }
 
 export type ChatSaveMessage = {
@@ -381,7 +382,7 @@ function UserMessageText({ message, text }: { message: any; text: string }) {
   )
 }
 
-function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection, saveContextRef, pendingChatNavigationRef, onChatStatusChange }: ChatbotProps) {
+function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection, saveContextRef, pendingChatNavigationRef, onChatStatusChange, mobileCodePlayerBar }: ChatbotProps) {
   const [selectedMood, setSelectedMood] = useState<string | null>(null)
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
@@ -1189,9 +1190,14 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                                     }}
                                   >
                                     <Icons.chatbotLogo className={`size-5 ${isLoading ? 'opacity-50' : ''}`} />
-                                    <span className="text-sm font-medium">
-                                      {isLoading ? 'Generating Strudel Code...' : isCompleted ? 'Generated Strudel Code' : 'Strudel Code Tool'}
-                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <span className="text-sm font-medium">
+                                        {isLoading ? 'Generating Strudel Code...' : isCompleted ? 'Generated Strudel Code' : 'Strudel Code Tool'}
+                                      </span>
+                                      {isCompleted && (
+                                        <p className="text-xs text-muted-foreground md:hidden">Tap to view code</p>
+                                      )}
+                                    </div>
                                   </div>
                                 )
                               }
@@ -1249,6 +1255,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         )}
       </ConversationWithFade>
       <div className="shrink-0">
+      {mobileCodePlayerBar}
       <Collapsible open={isSuggestionsOpen} onOpenChange={setIsSuggestionsOpen} className="group">
         <CollapsibleTrigger className="flex items-center justify-between gap-2 mb-1.5 w-full">
           <Label className="text-sm font-semibold text-muted-foreground">Suggestions</Label>
@@ -1340,7 +1347,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   )
 }
 
-export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection, saveContextRef, pendingChatNavigationRef, onChatStatusChange }: ChatbotProps) {
+export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection, saveContextRef, pendingChatNavigationRef, onChatStatusChange, mobileCodePlayerBar }: ChatbotProps) {
   return (
     <PromptInputProvider>
       <ChatbotContent
@@ -1359,6 +1366,7 @@ export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolErr
         saveContextRef={saveContextRef}
         pendingChatNavigationRef={pendingChatNavigationRef}
         onChatStatusChange={onChatStatusChange}
+        mobileCodePlayerBar={mobileCodePlayerBar}
       />
     </PromptInputProvider>
   )

@@ -45,6 +45,15 @@ export type StrudelCodeViewerHandle = {
   save: () => Promise<boolean>
   saveWithCode: (code: string) => Promise<boolean>
   applyCode: (code: string) => void
+  togglePlayback: () => Promise<void>
+  copyCode: () => Promise<void>
+  openShare: () => void
+}
+
+export type StrudelPlayerState = {
+  isPlaying: boolean
+  hasEditorCode: boolean
+  canPlay: boolean
 }
 
 interface StrudelCodeViewerProps {
@@ -59,6 +68,7 @@ interface StrudelCodeViewerProps {
   resetKey?: string | null
   chatId?: string
   shareTitle?: string
+  onPlayerStateChange?: (state: StrudelPlayerState) => void
 }
 
 const normalizeStrudelCode = (code: string) => {
@@ -132,7 +142,7 @@ const getErrorRange = (error: unknown, code: string) => {
 }
 
 const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerProps>(function StrudelCodeViewer(
-  { snippets, persistedCode = null, isCodeStreaming = false, isLoading = false, onFixInChat, onAddSelectionToContext, onCodeSaved, onEnsureChat, resetKey, chatId, shareTitle },
+  { snippets, persistedCode = null, isCodeStreaming = false, isLoading = false, onFixInChat, onAddSelectionToContext, onCodeSaved, onEnsureChat, resetKey, chatId, shareTitle, onPlayerStateChange },
   ref,
 ) {
   const activeSnippet = snippets[0]
@@ -181,6 +191,9 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
   const anonymousSessionId = useAnonymousSession()
   const handleSaveCodeRef = useRef<(force?: boolean, codeOverride?: string) => Promise<boolean>>(async () => false)
   const applyCodeRef = useRef<(code: string) => void>(() => {})
+  const handleTogglePlaybackRef = useRef<() => Promise<void>>(async () => {})
+  const handleCopyRef = useRef<() => Promise<void>>(async () => {})
+  const openShareRef = useRef<() => void>(() => {})
 
   useImperativeHandle(ref, () => ({
     getCurrentCode: () => getCurrentEditorCode(),
@@ -188,6 +201,9 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
     save: () => handleSaveCodeRef.current(true),
     saveWithCode: (code: string) => handleSaveCodeRef.current(true, code),
     applyCode: (code: string) => applyCodeRef.current(code),
+    togglePlayback: () => handleTogglePlaybackRef.current(),
+    copyCode: () => handleCopyRef.current(),
+    openShare: () => openShareRef.current(),
   }), [])
 
   useEffect(() => {
@@ -563,6 +579,15 @@ ${tokenRules}
       console.error('Failed to start Strudel playback:', error)
     }
   }
+  handleTogglePlaybackRef.current = handleTogglePlayback
+
+  useEffect(() => {
+    onPlayerStateChange?.({
+      isPlaying,
+      hasEditorCode,
+      canPlay: hasEditorCode && isEditorReady && !replError && !isCodeStreaming,
+    })
+  }, [isPlaying, hasEditorCode, isEditorReady, replError, isCodeStreaming, onPlayerStateChange])
 
   const getCurrentEditorCode = () => {
     const repl = replRef.current
@@ -683,6 +708,12 @@ ${tokenRules}
     }
   }
 
+  const openSharePreview = () => {
+    currentEditorCodeRef.current = getCurrentEditorCode()
+    setIsShareOpen(true)
+  }
+  openShareRef.current = openSharePreview
+
   const handleCopy = async () => {
     const code = getCurrentEditorCode()
     if (!code.trim()) return
@@ -699,6 +730,7 @@ ${tokenRules}
       console.error('Failed to copy Strudel code:', error)
     }
   }
+  handleCopyRef.current = handleCopy
 
   const handleToggleSharePlayback = async () => {
     const editor = sharePreviewRef.current?.editor
@@ -716,11 +748,6 @@ ${tokenRules}
     } catch (error) {
       console.error('Failed to play shared Strudel preview:', error)
     }
-  }
-
-  const openSharePreview = () => {
-    currentEditorCodeRef.current = getCurrentEditorCode()
-    setIsShareOpen(true)
   }
 
   const handleAddSelectionToContext = () => {
