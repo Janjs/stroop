@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { AuthButton } from '@/components/auth/auth-button'
 import { Icons } from '@/components/icons'
+import { SidebarTrigger } from '@/components/ui/sidebar'
 import Link from 'next/link'
 import { useConvexAuth } from 'convex/react'
 
@@ -19,6 +20,7 @@ export default function Header() {
     <header className="relative z-10 w-full flex-shrink-0">
       <nav className="flex w-full items-center gap-4 px-4 py-3 min-h-[3.5rem]" aria-label="Global">
         <div className="flex items-center gap-3 min-w-0">
+          {isAuthenticated && <SidebarTrigger className="md:hidden" />}
           {!isAuthenticated && isLandingPage && (
             <Link href="/" className="flex items-center gap-2 mr-4">
               <div className="flex aspect-square items-center justify-center">
