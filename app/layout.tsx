@@ -1,12 +1,9 @@
 import { cookies } from 'next/headers'
-import Header from './header'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import ConvexClientProvider from '@/lib/convex-client'
 import { ConvexAuthNextjsServerProvider } from '@convex-dev/auth/nextjs/server'
-import { SidebarInset } from '@/components/ui/sidebar'
-import { AppSidebarProvider } from '@/components/app-sidebar-provider'
-import { AppSidebar } from '@/components/app-sidebar'
+import { AppLayout } from '@/components/app-layout'
 import { themeInitScript } from '@/lib/theme-script'
 
 export const metadata = {
@@ -45,19 +42,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ConvexAuthNextjsServerProvider apiRoute="/api/auth">
           <ConvexClientProvider>
             <ThemeProvider>
-              <AppSidebarProvider
-                defaultOpen={defaultOpen}
+              <AppLayout
+                defaultOpenFromCookie={defaultOpen}
                 hasSavedPreference={hasSavedPreference}
-                style={{ '--sidebar-width': '13rem' } as React.CSSProperties}
               >
-                <AppSidebar />
-                <SidebarInset>
-                  <div className="h-[100dvh] flex flex-col min-w-0">
-                    <Header />
-                    <div className="flex flex-1 min-h-0 overflow-auto justify-center min-w-0">{children}</div>
-                  </div>
-                </SidebarInset>
-              </AppSidebarProvider>
+                {children}
+              </AppLayout>
             </ThemeProvider>
           </ConvexClientProvider>
         </ConvexAuthNextjsServerProvider>

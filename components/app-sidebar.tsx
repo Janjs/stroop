@@ -36,7 +36,7 @@ export function AppSidebar() {
   const searchParams = useSearchParams()
   const { state, toggleSidebar, isMobile, setOpenMobile } = useSidebar()
   const isCollapsed = state === 'collapsed'
-  const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth()
+  const { isAuthenticated } = useConvexAuth()
   const { handleSignIn, isSigningIn } = useSignIn()
 
   const { results: chats, status, loadMore } = usePaginatedQuery(
@@ -89,10 +89,6 @@ export function AppSidebar() {
 
     return () => window.clearTimeout(timeoutId)
   }, [chats])
-
-  if (isAuthLoading && !pathname.startsWith('/generate')) {
-    return null
-  }
 
   if (!isAuthenticated && pathname === '/') {
     return null
