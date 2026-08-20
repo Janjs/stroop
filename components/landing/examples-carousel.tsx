@@ -27,6 +27,63 @@ import {
 
 const EXAMPLES = [
   {
+    title: 'Neon Drive',
+    prompt:
+      '80s synth-pop at 90 bpm with 909 drums, pulsing saw bass, octave bass riffs, supersaw pads, and a square-wave lead with dotted delay.',
+    code: `stack(
+  s("bd ~ bd ~, ~ sd ~ sd, hh*8, ~ ~ [~ oh] ~")
+    .bank("RolandTR909"),
+  note("<c2*8 a1*8 f1*8 g1*8>")
+    .s("sawtooth").lpf(650),
+  note("<[c2 c2 c3 c2]*2 [a1 a1 a2 a1]*2 [f1 f1 f2 f1]*2 [g1 g1 g2 g1]*2>")
+    .s("gm_synth_bass_1"),
+  chord("<C Am F G>")
+    .voicing().s("supersaw"),
+  note("<[e5 g5 [a5 g5] e5] [e5 c5 [b4 c5] e5] [a4 c5 [f5 e5] c5] [d5 b4 [a4 b4] g4]>")
+    .s("square").delay(.3)
+).cpm(22.5)`,
+    fullCode: `stack(
+  s("bd ~ bd ~, ~ sd ~ sd, hh*8, ~ ~ [~ oh] ~")
+    .bank("RolandTR909")
+    .gain("1 .9 .8 .9")
+    .room(".08 .45 .08 .45")
+    .roomsize(.7),
+  note("<c2*8 a1*8 f1*8 g1*8>")
+    .s("sawtooth")
+    .lpf(650)
+    .lpq(5)
+    .decay(.18)
+    .sustain(.25)
+    .release(.08)
+    .gain(.45),
+  note("<[c2 c2 c3 c2]*2 [a1 a1 a2 a1]*2 [f1 f1 f2 f1]*2 [g1 g1 g2 g1]*2>")
+    .s("gm_synth_bass_1")
+    .clip(.65)
+    .lpf(900)
+    .gain(.62),
+  chord("<C Am F G>")
+    .voicing()
+    .s("supersaw")
+    .attack(.04)
+    .decay(.35)
+    .sustain(.55)
+    .release(.5)
+    .lpf(sine.slow(8).range(1200,4200))
+    .gain(.28)
+    .pan(sine.slow(4).range(.25,.75))
+    .room(.35),
+  note("<[e5 g5 [a5 g5] e5] [e5 c5 [b4 c5] e5] [a4 c5 [f5 e5] c5] [d5 b4 [a4 b4] g4]>")
+    .s("square")
+    .clip(.35)
+    .lpf(3200)
+    .gain(.22)
+    .delay(.3)
+    .delaytime(.333)
+    .delayfeedback(.35)
+    .room(.2)
+).cpm(22.5)`,
+  },
+  {
     title: 'Melancholic Pop',
     prompt:
       'Melancholic pop at 110 bpm with 808 drums, warm electric piano chords, finger bass, and ethereal synth choir pads.',

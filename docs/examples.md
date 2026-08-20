@@ -1,6 +1,53 @@
 # Strudel Code Examples
 
-## 1. Melancholic Pop
+## 1. Neon Drive
+
+**Prompt:** 80s synth-pop at 90 bpm with 909 drums, pulsing saw bass, octave bass riffs, supersaw pads, and a square-wave lead with dotted delay.
+
+```strudel
+stack(
+  s("bd ~ bd ~, ~ sd ~ sd, hh*8, ~ ~ [~ oh] ~")
+    .bank("RolandTR909")
+    .gain("1 .9 .8 .9")
+    .room(".08 .45 .08 .45")
+    .roomsize(.7),
+  note("<c2*8 a1*8 f1*8 g1*8>")
+    .s("sawtooth")
+    .lpf(650)
+    .lpq(5)
+    .decay(.18)
+    .sustain(.25)
+    .release(.08)
+    .gain(.45),
+  note("<[c2 c2 c3 c2]*2 [a1 a1 a2 a1]*2 [f1 f1 f2 f1]*2 [g1 g1 g2 g1]*2>")
+    .s("gm_synth_bass_1")
+    .clip(.65)
+    .lpf(900)
+    .gain(.62),
+  chord("<C Am F G>")
+    .voicing()
+    .s("supersaw")
+    .attack(.04)
+    .decay(.35)
+    .sustain(.55)
+    .release(.5)
+    .lpf(sine.slow(8).range(1200,4200))
+    .gain(.28)
+    .pan(sine.slow(4).range(.25,.75))
+    .room(.35),
+  note("<[e5 g5 [a5 g5] e5] [e5 c5 [b4 c5] e5] [a4 c5 [f5 e5] c5] [d5 b4 [a4 b4] g4]>")
+    .s("square")
+    .clip(.35)
+    .lpf(3200)
+    .gain(.22)
+    .delay(.3)
+    .delaytime(.333)
+    .delayfeedback(.35)
+    .room(.2)
+).cpm(22.5)
+```
+
+## 2. Melancholic Pop
 
 **Prompt:** Melancholic pop at 110 bpm with 808 drums, warm electric piano chords, finger bass, and ethereal synth choir pads.
 
@@ -39,7 +86,7 @@ stack(
 ).cpm(27.5)
 ```
 
-## 2. Chiptune Platformer Theme
+## 3. Chiptune Platformer Theme
 
 **Prompt:** Generate a chiptune-style platformer theme inspired by classic 8-bit game music. Write a bright, catchy lead melody with frequent rests, repeated notes, and small stepwise motions that feel playful and heroic. Add a secondary counter-melody that answers the lead in a lower register, creating call-and-response movement. Support both with a simple, driving bass line built from repeated root notes and short walking figures. Use tight note lengths and fast playback so the music feels bouncy, energetic, and loop-ready. The overall vibe should be nostalgic, joyful, and instantly memorable—perfect for an early platformer world theme.
 
@@ -80,7 +127,7 @@ stack(
 ).fast(2)
 ```
 
-## 3. Techno Bass Fugue
+## 4. Techno Bass Fugue
 
 **Prompt:** Generate a techno bass fugue built from electric bass samples in a minor scale. Create a repeating but evolving bass motif using nested rhythmic groupings and polymetric subdivisions. Layer the motif with transposed entries to suggest contrapuntal voices, like a fugue. Introduce call-and-response variations via short delays, echoes, and occasional interval jumps. Shape the tone with slow, evolving low-pass filter sweeps and high resonance for a dub-influenced, hypnotic feel. Support the bass with a minimal, steady kick-snare-hi-hat groove that keeps it club-ready. The overall result should feel algorithmic, precise, and constantly mutating while remaining tight and danceable.
 
@@ -112,7 +159,7 @@ x=>x.add(7)
 .pianoroll({vertical:1})
 ```
 
-## 4. Blippy Rhodes Jazz-Techno
+## 5. Blippy Rhodes Jazz-Techno
 
 **Prompt:** Generate a playful, blippy Rhodes-led groove with a jazzy–electronic feel. Use a bright electric piano as the main voice, playing short, syncopated motifs that loop and mutate. Move fluidly between major, mixolydian, lydian, and occasional minor harmonies for a colorful, shifting mood. Apply rhythmic gating and subtle pitch offsets to give the notes a bouncy, glitch-adjacent character. Add space with small-room reverb and tempo-synced delays that create soft echoes without washing out the groove. Support the melody with a simple but punchy kick, snare, and hi-hat pattern, plus a warm, filtered bass underneath. The overall result should feel light, playful, harmonically rich, and rhythmically tight—like blippy jazz-techno with sparkle.
 
@@ -156,7 +203,7 @@ stack(
 ).fast(3/2)
 ```
 
-## 5. Club-Jazz Csound Groove
+## 6. Club-Jazz Csound Groove
 
 **Prompt:** Generate a live-coded jazz–electronic groove built around rich seventh chords and a steady rhythmic pulse. Use lush, voiced jazz chords that cycle slowly, with evolving timbral movement driven by gradual filter changes. Add a repeating, octave-anchored bass line that locks tightly to the harmony and reinforces the groove. Introduce a syncopated melodic figure that weaves around the chords, occasionally shifting intervals for variation. Keep the rhythm precise and mechanical but let the harmony feel warm and expressive. Ground everything with a classic drum-machine pattern—kick, hi-hat, and clap—for a late-night, club-jazz feel. The result should sit between algorithmic precision and soulful jazz harmony.
 
