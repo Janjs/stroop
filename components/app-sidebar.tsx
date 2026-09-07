@@ -11,6 +11,7 @@ import { Icons } from '@/components/icons'
 import { AuthButton } from '@/components/auth/auth-button'
 import { SidebarChatItem } from '@/components/sidebar-chat-item'
 import { useSignIn } from '@/hooks/useSignIn'
+import { DEFAULT_CHAT_TITLE } from '@/lib/chat-title'
 import { Button } from '@/components/ui/button'
 import {
   Sidebar,
@@ -45,6 +46,8 @@ export function AppSidebar() {
     { initialNumItems: 20 }
   )
   const removeChat = useMutation(api.chats.remove)
+  const createChat = useMutation(api.chats.create)
+  const isCreatingChatRef = useRef(false)
   const seenChatIdsRef = useRef<Set<string>>(new Set())
   const [animatingChatIds, setAnimatingChatIds] = useState<Set<string>>(new Set())
 
@@ -94,13 +97,28 @@ export function AppSidebar() {
     return null
   }
 
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
     if (!isAuthenticated) {
       router.push('/')
       return
     }
-    if (isMobile) setOpenMobile(false)
-    router.push(`/generate?new=${Date.now()}`)
+    if (isCreatingChatRef.current) return
+
+    isCreatingChatRef.current = true
+    try {
+      const chatId = await createChat({
+        title: DEFAULT_CHAT_TITLE,
+        messages: [],
+        snippets: [],
+      })
+
+      if (isMobile) setOpenMobile(false)
+      router.push(`/generate?chatId=${chatId}`)
+    } catch (error) {
+      console.error('Failed to create chat', error)
+    } finally {
+      isCreatingChatRef.current = false
+    }
   }
 
   const handleDeleteChat = async (chatId: Id<'chats'>) => {

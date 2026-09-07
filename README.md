@@ -72,6 +72,10 @@ The app uses a self-hosted Convex backend.
 
 Made by [@Janjs](https://x.com/Janjijs)
 
-## 📄 License
+## License
 
-MIT
+GNU Affero General Public License v3.0 or later. See [LICENSE](LICENSE).
+
+Stroop embeds the AGPL-licensed Strudel REPL. If you run a modified version of
+Stroop as a network service, the AGPL requires you to offer its corresponding
+source code to users of that service.

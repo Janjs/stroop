@@ -931,6 +931,12 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
     if (isAuthenticated && !chatId && !currentChatIdRef.current) {
       await ensureChatCreated(textToSend)
+    } else if (isAuthenticated && chatId && existingChat?.title === DEFAULT_CHAT_TITLE) {
+      void generateChatTitle(textToSend).then((title) => {
+        if (title !== DEFAULT_CHAT_TITLE) {
+          void updateChat({ id: chatId as Id<'chats'>, title })
+        }
+      })
     }
 
     const selectionToSend = selectionContext ?? getEditorContext?.()?.selection
