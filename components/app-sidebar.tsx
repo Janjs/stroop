@@ -241,9 +241,11 @@ export function AppSidebar() {
       )}
       <SidebarFooter className="mt-auto px-2 pt-2 pb-4 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0">
         <SidebarMenu className="group-data-[collapsible=icon]:items-center">
-          <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
-            <ModeToggle variant="sidebar" />
-          </SidebarMenuItem>
+          {!isAuthenticated && (
+            <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+              <ModeToggle variant="sidebar" />
+            </SidebarMenuItem>
+          )}
           {isAuthenticated && <AuthButton variant="sidebar" />}
         </SidebarMenu>
       </SidebarFooter>

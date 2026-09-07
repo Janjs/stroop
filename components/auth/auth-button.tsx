@@ -118,8 +118,8 @@ function HeaderAuthButton() {
       <About variant="icon" />
       <ModeToggle />
       <Button onClick={handleSignIn} disabled={isSigningIn}>
-        {isSigningIn && <Icons.spinner className="animate-spin" />}
-        Sign In
+        {isSigningIn ? <Icons.spinner className="animate-spin" /> : <Icons.google />}
+        Sign in with Google
       </Button>
     </div>
   )
