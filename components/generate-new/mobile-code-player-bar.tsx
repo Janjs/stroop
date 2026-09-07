@@ -37,7 +37,7 @@ export function MobileCodePlayerBar({
   const actionsDisabled = isStreaming || !hasCode
 
   return (
-    <div className="mb-3 grid grid-cols-3 items-center gap-2 rounded-lg border bg-card px-3 py-2">
+    <div data-slot="mobile-code-player-bar" className="mb-3 grid grid-cols-3 items-center gap-2 rounded-lg border px-3 py-2">
       <div className="flex items-center gap-2">
         <Button
           type="button"

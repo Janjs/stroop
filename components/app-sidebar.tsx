@@ -13,12 +13,14 @@ import { SidebarChatItem } from '@/components/sidebar-chat-item'
 import { useSignIn } from '@/hooks/useSignIn'
 import { DEFAULT_CHAT_TITLE } from '@/lib/chat-title'
 import { Button } from '@/components/ui/button'
+import ModeToggle from '@/components/mode-toggle'
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarFooter,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -151,16 +153,16 @@ export function AppSidebar() {
   )
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="gap-2">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
               size="lg"
-              className="data-[state=open]:bg-muted data-[state=open]:text-foreground hover:bg-background"
+              className="data-[state=open]:bg-muted data-[state=open]:text-foreground"
             >
-              <Link href="/" className="flex min-h-12 items-center gap-2 ml-1">
+              <Link href="/" className="flex min-h-12 items-center gap-2">
                 <div className="flex aspect-square items-center justify-center">
                   <Icons.logo className="size-6.5" />
                 </div>
@@ -237,7 +239,14 @@ export function AppSidebar() {
           </div>
         </SidebarContent>
       )}
-      {isAuthenticated && <AuthButton variant="sidebar" />}
+      <SidebarFooter className="mt-auto px-2 pt-2 pb-4 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0">
+        <SidebarMenu className="group-data-[collapsible=icon]:items-center">
+          <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+            <ModeToggle variant="sidebar" />
+          </SidebarMenuItem>
+          {isAuthenticated && <AuthButton variant="sidebar" />}
+        </SidebarMenu>
+      </SidebarFooter>
     </Sidebar>
   )
 }

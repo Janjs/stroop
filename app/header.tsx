@@ -16,12 +16,23 @@ export default function Header() {
     return null
   }
 
+  if (!isLoading && isAuthenticated && isLandingPage) {
+    return null
+  }
+
   const showSignedOutHeader = !isLoading && !isAuthenticated
   const showMobileSidebarTrigger = !isLoading && (isAuthenticated || !isLandingPage)
 
   return (
-    <header className="relative z-10 w-full flex-shrink-0">
-      <nav className="flex w-full items-center gap-4 px-4 py-3 min-h-[3.5rem]" aria-label="Global">
+    <header className={`relative z-10 w-full flex-shrink-0 ${showSignedOutHeader ? 'px-5 md:px-10 lg:px-16' : 'px-3 pt-3 md:px-4'}`}>
+      <nav
+        className={
+          showSignedOutHeader
+            ? 'mx-auto flex min-h-14 w-full max-w-6xl items-center py-3'
+            : 'flex min-h-12 w-full items-center gap-4 rounded-2xl border border-white/30 bg-background/65 px-3 shadow-sm backdrop-blur-2xl dark:border-white/10'
+        }
+        aria-label="Global"
+      >
         <div className="flex items-center gap-3 min-w-0">
           {showMobileSidebarTrigger && <SidebarTrigger className="md:hidden" />}
           {!isLoading && !isAuthenticated && isLandingPage && (
@@ -29,7 +40,7 @@ export default function Header() {
               <div className="flex aspect-square items-center justify-center">
                 <Icons.logo className="size-6.5" />
               </div>
-              <span className="text-2xl font-outfit">stroop</span>
+              <span className="font-outfit text-xl font-semibold tracking-[-0.03em]">stroop</span>
             </Link>
           )}
         </div>

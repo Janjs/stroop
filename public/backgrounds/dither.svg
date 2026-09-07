@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" shape-rendering="crispEdges">
+  <rect width="1" height="1" fill="#000" opacity=".18"/>
+  <rect x="1" width="1" height="1" fill="#000" opacity=".08"/>
+  <rect x="2" width="1" height="1" fill="#000" opacity=".14"/>
+  <rect x="3" width="1" height="1" fill="#000" opacity=".06"/>
+  <rect y="1" width="1" height="1" fill="#000" opacity=".04"/>
+  <rect x="1" y="1" width="1" height="1" fill="#000" opacity=".12"/>
+  <rect x="2" y="1" width="1" height="1" fill="#000" opacity=".02"/>
+  <rect x="3" y="1" width="1" height="1" fill="#000" opacity=".1"/>
+  <rect y="2" width="1" height="1" fill="#000" opacity=".14"/>
+  <rect x="1" y="2" width="1" height="1" fill="#000" opacity=".05"/>
+  <rect x="2" y="2" width="1" height="1" fill="#000" opacity=".16"/>
+  <rect x="3" y="2" width="1" height="1" fill="#000" opacity=".07"/>
+  <rect y="3" width="1" height="1" fill="#000" opacity=".01"/>
+  <rect x="1" y="3" width="1" height="1" fill="#000" opacity=".09"/>
+  <rect x="2" y="3" width="1" height="1" fill="#000" opacity=".03"/>
+  <rect x="3" y="3" width="1" height="1" fill="#000" opacity=".11"/>
+</svg>

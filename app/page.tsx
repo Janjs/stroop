@@ -9,9 +9,9 @@ import Link from 'next/link'
 
 const Page = () => {
   return (
-    <div className="flex min-h-[calc(100dvh-60px)] w-full max-w-full md:items-center justify-center px-4 py-8 md:px-8 lg:px-12">
-      <div className="flex w-full max-w-6xl flex-col gap-12 md:flex-row md:items-center md:gap-10 lg:gap-16">
-        <div className="flex flex-col gap-4 md:w-[55%]">
+    <div className="flex min-h-[calc(100dvh-72px)] w-full max-w-full items-center justify-center px-5 py-10 md:px-10 lg:px-16">
+      <div className="flex w-full max-w-6xl flex-col gap-12 md:flex-row md:items-center md:gap-12 lg:gap-20">
+        <div className="flex flex-col gap-5 md:w-[55%]">
           <Link
             href="https://chordwise.chat"
             target="_blank"
@@ -19,23 +19,22 @@ const Page = () => {
           >
             <Badge
               variant="outline"
-              className="flex h-7 w-fit cursor-pointer items-center gap-2 border-foreground/20 bg-card/80 shadow-sm backdrop-blur transition-colors hover:bg-card/90"
+              className="flex h-8 w-fit cursor-pointer items-center gap-2 rounded-full border-white/40 bg-card/70 px-3 shadow-sm backdrop-blur-xl transition-[background-color,transform] hover:bg-card/90 active:scale-[0.98] dark:border-white/10"
             >
               <span className="leading-none">Try chordwise too!</span>
               <Icons.chordwiseMascot className="h-4 w-4 shrink-0" />
             </Badge>
           </Link>
-          <h1 className="flex flex-wrap items-start gap-x-2 gap-y-1 font-outfit text-3xl font-bold md:text-4xl xl:flex-nowrap">
-            <span>Create playable</span>
+          <h1 className="landing-title max-w-2xl font-outfit text-[clamp(2.6rem,6vw,5.2rem)] font-semibold leading-[0.96] tracking-[-0.045em]">
+            <span>Create music with playable </span>
             <a href="https://strudel.cc/" target="_blank" rel="noopener noreferrer" className="group relative underline underline-offset-4 decoration-foreground/30 transition-colors hover:decoration-foreground">
               Strudel
               <Icons.arrowUpRight className="absolute -right-2 -top-1 h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" />
             </a>
-            <span>code</span>
           </h1>
-          <h3 className="text-sm md:text-lg text-muted-foreground">
-            Generate Strudel code snippets for live-coding music
-          </h3>
+          <p className="max-w-lg text-base font-medium leading-relaxed text-muted-foreground md:text-lg">
+            Describe a sound. Stroop turns it into Strudel you can hear, edit, and keep shaping.
+          </p>
           <Suspense fallback={null}>
             <LandingInput />
           </Suspense>

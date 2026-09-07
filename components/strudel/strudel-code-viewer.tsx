@@ -2,7 +2,6 @@
 
 import { createElement, forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { EditorSelectionContext, StrudelSnippet } from '@/types/types'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Kbd, KbdGroup } from '@/components/ui/kbd'
 import { LoadingButton, type LoadingButtonHandle } from '@/components/interior/loading-button'
@@ -24,13 +23,13 @@ import {
   type EditorSelectionUI,
   type StrudelEditorElement,
 } from '@/lib/strudel-editor-code'
-import { useTheme } from 'next-themes'
+import { subscribeAppearance, surfaceIsDark } from '@/lib/appearance'
 import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
 import { useAnonymousSession } from '@/hooks/useAnonymousSession'
 import { cn } from '@/lib/utils'
-import { buildStrudelTokenColorRules } from '@/lib/strudel-editor-theme'
+import { buildStrudelNotePulseRules, buildStrudelTokenColorRules } from '@/lib/strudel-editor-theme'
 import {
   Dialog,
   DialogContent,
@@ -174,7 +173,6 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
   hasUnsavedChangesRef.current = hasUnsavedChanges
   const liveEvaluationTimeoutRef = useRef<number | null>(null)
   const isApplyingExternalCodeRef = useRef(false)
-  const { resolvedTheme } = useTheme()
   const lastErrorKeyRef = useRef<string | null>(null)
   const [fontSize, setFontSize] = useState(14)
   const [selectionUI, setSelectionUI] = useState<EditorSelectionUI | null>(null)
@@ -337,26 +335,21 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
       if (!container?.querySelector('.cm-editor')) return
       configureStrudelEditor(replRef.current)
       container.id = 'strudel-repl-container'
-      const root = getComputedStyle(document.documentElement)
-      const get = (v: string) => root.getPropertyValue(v).trim() || 'inherit'
-      const isDark = resolvedTheme === 'dark'
-      const pageBg = get('--background')
-      const bg = isDark
-        ? `color-mix(in oklab, ${get('--input')} 30%, ${pageBg})`
-        : '#fff'
-      const fg = isDark ? get('--foreground') : get('--popover-foreground')
-      const muted = get('--muted')
-      const border = get('--border')
-      const accent = get('--editor-accent')
-      const accentFg = get('--editor-accent-foreground')
-      const ring = get('--editor-ring')
-      const radius = get('--radius')
-      const fontMono = get('--font-mono') || 'monospace'
-      const mutedFg = get('--muted-foreground')
-      const primary = get('--editor-primary')
-      const secondary = get('--secondary')
-      const accentColor = get('--editor-accent')
-      const ringColor = get('--editor-ring')
+      const token = (v: string) => `var(${v})`
+      const isDark = surfaceIsDark()
+      const bg = 'transparent'
+      const activeLineBg = `color-mix(in oklab, ${token('--muted')} 30%, transparent)`
+      const fg = token('--foreground')
+      const accent = token('--editor-accent')
+      const accentFg = token('--editor-accent-foreground')
+      const ring = token('--editor-ring')
+      const radius = token('--radius')
+      const fontMono = 'var(--font-mono, monospace)'
+      const mutedFg = token('--muted-foreground')
+      const primary = token('--editor-primary')
+      const secondary = token('--secondary')
+      const accentColor = token('--editor-accent')
+      const ringColor = token('--editor-ring')
       const lineHeightPx = fontSize * LINE_HEIGHT_RATIO
       const contentBufferPx = BUFFER_LINES * lineHeightPx
       const tokenRules = buildStrudelTokenColorRules(['#strudel-repl-container', '.strudel-share-preview'], {
@@ -371,10 +364,10 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
       const selectionBg = isDark
         ? `color-mix(in oklab, ${accent} 18%, transparent)`
         : `color-mix(in oklab, ${primary} 25%, transparent)`
-      const noteHighlightColor = accentFg
-      const noteHighlightBg = isDark
-        ? `color-mix(in oklab, ${accentFg} 22%, transparent)`
-        : `color-mix(in oklab, ${accentFg} 14%, transparent)`
+      const notePulseRules = buildStrudelNotePulseRules(
+        ['#strudel-repl-container', '.strudel-share-preview'],
+        { isDark, accentFg },
+      )
       const id = 'strudel-app-theme'
       let styleEl = document.getElementById(id) as HTMLStyleElement | null
       if (!styleEl) {
@@ -392,16 +385,15 @@ const StrudelCodeViewer = forwardRef<StrudelCodeViewerHandle, StrudelCodeViewerP
 #strudel-repl-container .cm-scroller.is-scrolling::-webkit-scrollbar,#strudel-repl-container .cm-scroller:hover::-webkit-scrollbar{width:6px;height:6px;}
 #strudel-repl-container .cm-scroller.is-scrolling::-webkit-scrollbar-thumb,#strudel-repl-container .cm-scroller:hover::-webkit-scrollbar-thumb{background-color:color-mix(in oklab, ${mutedFg} 35%, transparent);border-radius:9999px;}
 #strudel-repl-container .cm-content{box-sizing:border-box;color:${fg} !important;min-height:100%;padding-bottom:${contentBufferPx}px !important;}
-#strudel-repl-container .cm-gutters{background-color:${isDark ? muted : bg} !important;border-color:${border};min-height:100%;}
-#strudel-repl-container .cm-gutterElement{min-width:3ch;text-align:right;}
+#strudel-repl-container .cm-gutters{background-color:transparent !important;border:none;min-height:100%;}
+#strudel-repl-container .cm-lineNumbers .cm-gutterElement{min-width:3ch;padding-left:0;text-align:right;}
 #strudel-repl-container .cm-activeLineGutter{background-color:color-mix(in oklab, ${accent} 35%, transparent) !important;color:${isDark ? accentFg : fg} !important;}
-#strudel-repl-container .cm-activeLine{background-color:${isDark ? muted : bg} !important;}
+#strudel-repl-container .cm-activeLine{background-color:${activeLineBg} !important;}
 #strudel-repl-container .cm-selectionMatch,#strudel-repl-container .cm-selectionBackground{background-color:${selectionBg} !important;}
-#strudel-repl-container .cm-content span[style*="outline"]{outline:1px solid ${noteHighlightColor} !important;background-color:${noteHighlightBg} !important;border-radius:2px;}
 #strudel-repl-container .cm-editor.cm-focused{outline-color:${ring};}
 #strudel-repl-container .cm-cursor{border-left-color:${fg};}
-#strudel-repl-container .cm-editor .cm-flash{background-color:color-mix(in oklab, ${primary} 20%, transparent) !important;outline:1px solid color-mix(in oklab, ${primary} 55%, transparent);border-radius:2px;}
-.strudel-share-preview .cm-content span[style*="outline"]{outline:1px solid ${noteHighlightColor} !important;background-color:${noteHighlightBg} !important;border-radius:2px;}
+#strudel-repl-container .cm-editor .cm-flash{background-color:color-mix(in oklab, ${primary} 20%, transparent) !important;outline:none !important;border-radius:9999px;}
+${notePulseRules}
 .strudel-share-preview .cm-editor,.strudel-share-preview .cm-scroller,.strudel-share-preview .cm-content,.strudel-share-preview .cm-line{font-family:${fontMono};font-weight:500;font-size:11px;}
 .strudel-share-preview .cm-editor{background-color:transparent !important;color:${fg} !important;height:100%;}
 .strudel-share-preview .cm-scroller{background-color:transparent !important;overflow:auto !important;}
@@ -417,11 +409,13 @@ ${tokenRules}
     }
     const raf = window.requestAnimationFrame(() => apply())
     const late = window.setTimeout(() => apply(), 300)
+    const stop = subscribeAppearance(apply)
     return () => {
       window.cancelAnimationFrame(raf)
       window.clearTimeout(late)
+      stop()
     }
-  }, [isEditorReady, resolvedTheme, fontSize])
+  }, [isEditorReady, fontSize])
 
   useEffect(() => {
     return () => {
@@ -701,7 +695,7 @@ ${tokenRules}
   }
 
   const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!hasUnsavedChanges || replError) return
+    if (!hasUnsavedChanges) return
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
       event.preventDefault()
       saveButtonRef.current?.run()
@@ -786,8 +780,7 @@ ${tokenRules}
   }
 
   return (
-    <Card className="h-full flex flex-col overflow-hidden border-border bg-white shadow-md dark:bg-input/30 dark:shadow-xs">
-      <CardContent className="flex-1 min-h-0 flex flex-col bg-white p-0 dark:bg-transparent">
+    <div className="flex h-full flex-col overflow-hidden">
         <div
           ref={editorContainerRef}
           className="strudel-main-editor relative flex-1 min-h-0"
@@ -811,7 +804,7 @@ ${tokenRules}
               successLabel="Saved"
               errorLabel="Retry"
               resetAfter={1000}
-              disabled={isCodeStreaming || !hasUnsavedChanges || Boolean(replError)}
+              disabled={isCodeStreaming || !hasUnsavedChanges}
               onError={(error) => console.error('Failed to save Strudel code:', error)}
               onReset={() => {
                 if (!hasUnsavedChangesRef.current) setSaveButtonVisible(false)
@@ -888,7 +881,6 @@ ${tokenRules}
             </div>
           </div>
         </div>
-      </CardContent>
       <Dialog open={isShareOpen} onOpenChange={setIsShareOpen}>
         <DialogContent className="max-w-lg rounded-3xl p-6">
           <DialogHeader>
@@ -939,7 +931,7 @@ ${tokenRules}
           {!chatId && <p className="text-center text-xs text-muted-foreground">Save this chat before sharing it.</p>}
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   )
 })
 

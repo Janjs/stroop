@@ -11,8 +11,8 @@ import { StrudelSnippet } from '@/types/types'
 import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useTheme } from 'next-themes'
-import { buildStrudelTokenColorRules } from '@/lib/strudel-editor-theme'
+import { subscribeAppearance, surfaceIsDark } from '@/lib/appearance'
+import { buildStrudelNotePulseRules, buildStrudelTokenColorRules } from '@/lib/strudel-editor-theme'
 import { Icons } from '@/components/icons'
 
 type StrudelEditorElement = HTMLElement & {
@@ -34,7 +34,6 @@ function SharedStroop() {
   const isPlayingRef = useRef(false)
   const [isReady, setIsReady] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
-  const { resolvedTheme } = useTheme()
 
   isPlayingRef.current = isPlaying
 
@@ -78,29 +77,35 @@ function SharedStroop() {
 
   useEffect(() => {
     if (!isReady) return
-    const root = getComputedStyle(document.documentElement)
-    const get = (value: string) => root.getPropertyValue(value).trim() || 'inherit'
-    const isDark = resolvedTheme === 'dark'
-    const fg = isDark ? get('--foreground') : get('--popover-foreground')
-    const primary = get('--editor-primary')
-    const mutedFg = get('--muted-foreground')
-    const secondary = get('--secondary')
-    const accent = get('--editor-accent')
-    const ring = get('--editor-ring')
-    const style = document.createElement('style')
-    style.id = 'strudel-shared-page-theme'
-    style.textContent = buildStrudelTokenColorRules(['.strudel-share-preview'], {
-      isDark,
-      fg,
-      mutedFg,
-      primary,
-      accent,
-      secondary,
-      ring,
-    })
-    document.head.appendChild(style)
-    return () => style.remove()
-  }, [isReady, resolvedTheme])
+    const apply = () => {
+      const token = (value: string) => `var(${value})`
+      document.getElementById('strudel-shared-page-theme')?.remove()
+      const style = document.createElement('style')
+      style.id = 'strudel-shared-page-theme'
+      const isDark = surfaceIsDark()
+      style.textContent =
+        buildStrudelTokenColorRules(['.strudel-share-preview'], {
+          isDark,
+          fg: token('--foreground'),
+          mutedFg: token('--muted-foreground'),
+          primary: token('--editor-primary'),
+          accent: token('--editor-accent'),
+          secondary: token('--secondary'),
+          ring: token('--editor-ring'),
+        }) +
+        buildStrudelNotePulseRules(['.strudel-share-preview'], {
+          isDark,
+          accentFg: token('--editor-accent-foreground'),
+        })
+      document.head.appendChild(style)
+    }
+    apply()
+    const stop = subscribeAppearance(apply)
+    return () => {
+      stop()
+      document.getElementById('strudel-shared-page-theme')?.remove()
+    }
+  }, [isReady])
 
   const togglePlayback = async () => {
     const editor = editorRef.current?.editor

@@ -16,8 +16,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Icons } from '@/components/icons'
 import { cn } from '@/lib/utils'
-import { useTheme } from 'next-themes'
-import { buildStrudelTokenColorRules } from '@/lib/strudel-editor-theme'
+import { subscribeAppearance, surfaceIsDark } from '@/lib/appearance'
+import { buildStrudelNotePulseRules, buildStrudelTokenColorRules } from '@/lib/strudel-editor-theme'
 import { loadStrudelRepl } from '@/lib/strudel-repl-loader'
 import {
   playStrudelEditor,
@@ -305,7 +305,6 @@ export default function ExamplesCarousel() {
   const replRef = useRef<StrudelEditorElement | null>(null)
   const playingIndexRef = useRef<number | null>(null)
   const lastEvaluatedCodeRef = useRef('')
-  const { resolvedTheme } = useTheme()
 
   playingIndexRef.current = playingIndex
 
@@ -375,23 +374,19 @@ export default function ExamplesCarousel() {
   }, [current, playingIndex])
 
   useEffect(() => {
-    if (!isEditorReady || !resolvedTheme) return
+    if (!isEditorReady) return
     const apply = () => {
-      const root = getComputedStyle(document.documentElement)
-      const get = (v: string) => root.getPropertyValue(v).trim() || 'inherit'
-      const fg = get('--foreground')
-      const fontMono = get('--font-mono') || 'monospace'
-      const primary = get('--editor-primary')
-      const accent = get('--editor-accent')
-      const accentFg = get('--editor-accent-foreground')
-      const secondary = get('--secondary')
-      const mutedFg = get('--muted-foreground')
-      const ring = get('--editor-ring')
-      const isDark = resolvedTheme === 'dark'
-      const noteHighlightColor = accentFg
-      const noteHighlightBg = isDark
-        ? `color-mix(in oklab, ${accentFg} 22%, transparent)`
-        : `color-mix(in oklab, ${accentFg} 14%, transparent)`
+      const token = (v: string) => `var(${v})`
+      const fg = token('--foreground')
+      const fontMono = 'var(--font-mono, monospace)'
+      const primary = token('--editor-primary')
+      const accent = token('--editor-accent')
+      const accentFg = token('--editor-accent-foreground')
+      const secondary = token('--secondary')
+      const mutedFg = token('--muted-foreground')
+      const ring = token('--editor-ring')
+      const isDark = surfaceIsDark()
+      const notePulseRules = buildStrudelNotePulseRules(['.strudel-example-editor'], { isDark, accentFg })
       const tokenRules = buildStrudelTokenColorRules(['.strudel-example-editor'], {
         isDark,
         fg,
@@ -412,8 +407,8 @@ export default function ExamplesCarousel() {
 .strudel-example-editor .cm-editor{background-color:transparent !important;color:${fg} !important;height:100%;}
 .strudel-example-editor .cm-scroller{background-color:transparent !important;overflow:auto !important;}
 .strudel-example-editor .cm-content{color:${fg} !important;padding:12px;}
-.strudel-example-editor .cm-content span[style*="outline"]{outline:1px solid ${noteHighlightColor} !important;background-color:${noteHighlightBg} !important;border-radius:2px;}
 .strudel-example-editor .cm-gutters{display:none !important;}
+${notePulseRules}
 .strudel-example-editor .cm-activeLine{background:transparent !important;}
 .strudel-example-editor .cm-editor.cm-focused{outline:none;}
 .strudel-example-editor .cm-cursor{border-left-color:${fg};}
@@ -423,12 +418,13 @@ ${tokenRules}
     }
     const raf = window.requestAnimationFrame(() => apply())
     const late = window.setTimeout(() => apply(), 300)
+    const stop = subscribeAppearance(apply)
     return () => {
       window.cancelAnimationFrame(raf)
       window.clearTimeout(late)
-      document.getElementById('strudel-example-theme')?.remove()
+      stop()
     }
-  }, [isEditorReady, resolvedTheme])
+  }, [isEditorReady])
 
   const scrollTo = useCallback(
     (index: number) => api?.scrollTo(index),
@@ -476,7 +472,7 @@ ${tokenRules}
         <CarouselContent>
           {EXAMPLES.map((example, i) => (
             <CarouselItem key={i}>
-              <Card className="border-l-2 border-l-primary/40 overflow-hidden">
+              <Card className="overflow-hidden">
                 <CardHeader className="pb-2 px-5 pt-4">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-semibold font-outfit">

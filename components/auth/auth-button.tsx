@@ -18,16 +18,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  SidebarFooter,
-  SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import { Icons } from '@/components/icons'
-import { useTheme } from 'next-themes'
 import { Badge } from '@/components/ui/badge'
 import About from '@/components/about'
 import ModeToggle from '@/components/mode-toggle'
+import { AppearanceSettings } from '@/components/appearance-settings'
 import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 
 type AuthButtonProps = {
@@ -45,8 +43,6 @@ type UserMenuProps = {
     isAuthenticated?: boolean
     credits?: number | null
   } | null | undefined
-  theme: string | undefined
-  setTheme: (theme: string) => void
   onSignOut: () => void
   trigger: ReactNode
   align?: 'start' | 'end'
@@ -57,8 +53,6 @@ function UserMenu({
   user,
   initials,
   credits,
-  theme,
-  setTheme,
   onSignOut,
   trigger,
   align = 'end',
@@ -67,7 +61,7 @@ function UserMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-      <DropdownMenuContent align={align} side={side} className="w-56 p-0">
+      <DropdownMenuContent align={align} side={side} className="w-72 p-0">
         <div className="px-3 py-2.5">
           <div className="flex flex-col space-y-1">
             {user?.name && <p className="text-sm font-medium">{user.name}</p>}
@@ -76,40 +70,7 @@ function UserMenu({
           </div>
         </div>
         <DropdownMenuSeparator />
-        <div className="px-3 py-2.5">
-          <div className="text-xs font-medium text-muted-foreground mb-2 px-2">Preferences</div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between px-2 py-1.5">
-              <span className="text-sm">Theme</span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-7 w-7 ${theme === 'system' || !theme ? 'bg-accent' : ''}`}
-                  onClick={() => setTheme('system')}
-                >
-                  <Icons.laptop className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-7 w-7 ${theme === 'light' ? 'bg-accent' : ''}`}
-                  onClick={() => setTheme('light')}
-                >
-                  <Icons.sun className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-7 w-7 ${theme === 'dark' ? 'bg-accent' : ''}`}
-                  onClick={() => setTheme('dark')}
-                >
-                  <Icons.moon className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <AppearanceSettings />
         <DropdownMenuSeparator />
         <div className="p-1">
           <div className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm w-full">
@@ -167,7 +128,6 @@ function HeaderAuthButton() {
 function SidebarAuthButton() {
   const { isAuthenticated } = useConvexAuth()
   const { signOut } = useAuthActions()
-  const { theme, setTheme } = useTheme()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const anonymousSessionId = useAnonymousSession()
@@ -199,44 +159,37 @@ function SidebarAuthButton() {
     const displayName = user?.name || user?.email || 'User'
 
     return (
-      <SidebarFooter className="mt-auto px-2 pt-2 pb-4 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-0">
-        <SidebarMenu className="group-data-[collapsible=icon]:items-center">
-          <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
-            <UserMenu
-              user={user}
-              initials={initials}
-              credits={credits}
-              theme={theme}
-              setTheme={setTheme}
-              onSignOut={handleSignOut}
-              align="start"
-              side="top"
-              trigger={
-                <SidebarMenuButton
-                  size="lg"
-                  variant="outline"
-                  tooltip={displayName}
-                  className="h-10 focus-visible:ring-0 data-[state=open]:bg-muted group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
-                >
-                  <Avatar className="size-7 group-data-[collapsible=icon]:size-6">
-                    <AvatarImage
-                      src={(user?.image as string) ?? undefined}
-                      alt={(user?.name as string) ?? (user?.email as string) ?? 'User'}
-                    />
-                    <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-                  </Avatar>
-                  <div className="grid flex-1 text-left text-xs leading-tight group-data-[collapsible=icon]:hidden">
-                    <span className="truncate font-medium">{displayName}</span>
-                    {user?.email && user?.name && (
-                      <span className="truncate text-muted-foreground">{user.email}</span>
-                    )}
-                  </div>
-                </SidebarMenuButton>
-              }
-            />
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
+      <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+        <UserMenu
+          user={user}
+          initials={initials}
+          credits={credits}
+          onSignOut={handleSignOut}
+          align="start"
+          side="top"
+          trigger={
+            <SidebarMenuButton
+              size="lg"
+              tooltip={displayName}
+              className="h-12 rounded-xl focus-visible:ring-0 hover:bg-muted/70 data-[state=open]:bg-muted/70 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+            >
+              <Avatar className="size-7 group-data-[collapsible=icon]:size-6">
+                <AvatarImage
+                  src={(user?.image as string) ?? undefined}
+                  alt={(user?.name as string) ?? (user?.email as string) ?? 'User'}
+                />
+                <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+              </Avatar>
+              <div className="grid flex-1 text-left text-xs leading-tight group-data-[collapsible=icon]:hidden">
+                <span className="truncate font-medium">{displayName}</span>
+                {user?.email && user?.name && (
+                  <span className="truncate text-muted-foreground">{user.email}</span>
+                )}
+              </div>
+            </SidebarMenuButton>
+          }
+        />
+      </SidebarMenuItem>
     )
   }
 

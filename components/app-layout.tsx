@@ -24,10 +24,10 @@ export function AppLayout({ children, defaultOpenFromCookie, hasSavedPreference 
   return (
     <AppSidebarProvider
       defaultOpen={defaultOpen}
-      style={{ '--sidebar-width': '13rem' } as React.CSSProperties}
+      style={{ '--sidebar-width': '14rem' } as React.CSSProperties}
     >
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="bg-transparent">
         <div className="h-[100dvh] flex flex-col min-w-0">
           <Header />
           <div className="flex flex-1 min-h-0 overflow-auto justify-center min-w-0">{children}</div>

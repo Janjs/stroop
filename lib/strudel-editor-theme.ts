@@ -164,6 +164,27 @@ function getLiteralClasses(): Set<string> {
   return cachedLiteralClasses ?? fromTheme
 }
 
+export function buildStrudelNotePulseRules(
+  scopes: StrudelEditorThemeScope[],
+  options: { isDark: boolean; accentFg: string },
+): string {
+  const { isDark, accentFg } = options
+  const peakBg = isDark
+    ? `color-mix(in oklab, ${accentFg} 30%, transparent)`
+    : `color-mix(in oklab, ${accentFg} 20%, transparent)`
+  const midBg = isDark
+    ? `color-mix(in oklab, ${accentFg} 18%, transparent)`
+    : `color-mix(in oklab, ${accentFg} 12%, transparent)`
+
+  let rules = `@keyframes strudel-note-pulse{0%{background-color:transparent;transform:scale(0.82);opacity:0}16%{background-color:${peakBg};transform:scale(1.1);opacity:1}30%{background-color:${midBg};transform:scale(0.96)}44%{transform:scale(1.03)}100%{background-color:transparent;transform:scale(1);opacity:0}}`
+
+  for (const scope of scopes) {
+    rules += `${scope} .cm-content span[style*="outline"]{outline:none !important;border:none !important;box-shadow:none !important;background-color:transparent;border-radius:9999px;padding:0 0.22em;margin:0 -0.12em;display:inline-block;vertical-align:baseline;transform-origin:center;box-decoration-break:clone;-webkit-box-decoration-break:clone;animation:strudel-note-pulse 480ms cubic-bezier(0.34,1.56,0.64,1) both;}`
+  }
+
+  return rules
+}
+
 export function buildStrudelTokenColorRules(
   scopes: StrudelEditorThemeScope[],
   options: StrudelTokenThemeOptions,
@@ -171,22 +192,22 @@ export function buildStrudelTokenColorRules(
   const { isDark, fg, mutedFg, primary, accent, secondary, ring } = options
   const pastel = (color: string) =>
     isDark
-      ? `color-mix(in oklab, ${color} 40%, ${fg})`
+      ? `color-mix(in oklab, ${color} 55%, ${fg})`
       : `color-mix(in oklab, ${color} 70%, ${fg})`
 
   const palette = isDark
     ? [pastel(primary), pastel(accent), pastel(secondary), pastel(mutedFg), pastel(ring), pastel(fg)]
-    : [fg, primary, mutedFg, `color-mix(in oklab, ${primary} 55%, ${fg})`]
+    : [fg, primary, ring, `color-mix(in oklab, ${primary} 75%, ${fg})`]
 
   const commentColor = isDark
     ? `color-mix(in oklab, ${mutedFg} 80%, transparent)`
     : `color-mix(in oklab, ${mutedFg} 40%, transparent)`
 
   const argumentColor = isDark
-    ? `color-mix(in oklab, ${mutedFg} 65%, ${fg})`
-    : mutedFg
+    ? `color-mix(in oklab, ${primary} 28%, ${fg})`
+    : `color-mix(in oklab, ${primary} 45%, ${mutedFg})`
 
-  const functionColor = `color-mix(in oklab, var(--primary) 40%, ${fg})`
+  const functionColor = `color-mix(in oklab, var(--primary) 60%, ${fg})`
   const methodColor = primary
 
   const commentClasses = getCommentClasses()

@@ -218,20 +218,21 @@ const extractSnippetsFromMessages = (messages: any[]): StrudelSnippet[] => {
 
 function SuggestionsWithFade({ children, className }: { children: React.ReactNode; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [showLeftFade, setShowLeftFade] = useState(false)
-  const [showRightFade, setShowRightFade] = useState(false)
 
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
-    const viewport = container.querySelector('[data-radix-scroll-area-viewport]')
+    const viewport = container.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null
     if (!viewport) return
 
     const checkScroll = () => {
-      const { scrollLeft, scrollWidth, clientWidth } = viewport as HTMLElement
-      setShowLeftFade(scrollLeft > 0)
-      setShowRightFade(scrollLeft < scrollWidth - clientWidth - 1)
+      const { scrollLeft, scrollWidth, clientWidth } = viewport
+      const start = scrollLeft > 0
+      const end = scrollLeft < scrollWidth - clientWidth - 1
+      viewport.toggleAttribute('data-fade-x', start || end)
+      viewport.toggleAttribute('data-fade-start', start)
+      viewport.toggleAttribute('data-fade-end', end)
     }
 
     checkScroll()
@@ -245,13 +246,7 @@ function SuggestionsWithFade({ children, className }: { children: React.ReactNod
   }, [])
 
   return (
-    <div ref={containerRef} className={`relative ${className || ''}`}>
-      {showLeftFade && (
-        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
-      )}
-      {showRightFade && (
-        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
-      )}
+    <div ref={containerRef} className={className}>
       {children}
     </div>
   )
@@ -259,8 +254,6 @@ function SuggestionsWithFade({ children, className }: { children: React.ReactNod
 
 function ConversationWithFade({ children, className, onViewportReady }: { children: React.ReactNode; className?: string; onViewportReady?: (viewport: HTMLElement | null) => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [showTopFade, setShowTopFade] = useState(false)
-  const [showBottomFade, setShowBottomFade] = useState(false)
   const viewportRef = useRef<HTMLElement | null>(null)
   const observerRef = useRef<MutationObserver | null>(null)
   const onViewportReadyRef = useRef(onViewportReady)
@@ -289,8 +282,11 @@ function ConversationWithFade({ children, className, onViewportReady }: { childr
       const viewport = viewportRef.current
       if (!viewport) return
       const { scrollTop, scrollHeight, clientHeight } = viewport
-      setShowTopFade(scrollTop > 0)
-      setShowBottomFade(scrollTop < scrollHeight - clientHeight - 1)
+      const start = scrollTop > 0
+      const end = scrollTop < scrollHeight - clientHeight - 1
+      viewport.toggleAttribute('data-fade-y', start || end)
+      viewport.toggleAttribute('data-fade-start', start)
+      viewport.toggleAttribute('data-fade-end', end)
     }
 
     const attachListeners = () => {
@@ -324,12 +320,6 @@ function ConversationWithFade({ children, className, onViewportReady }: { childr
 
   return (
     <div ref={containerRef} className={`relative flex flex-col min-h-0 ${className || ''}`}>
-      {showTopFade && (
-        <div className="absolute left-0 right-0 top-0 h-8 bg-gradient-to-b from-background to-transparent z-10 pointer-events-none" />
-      )}
-      {showBottomFade && (
-        <div className="absolute left-0 right-0 bottom-0 h-8 bg-gradient-to-t from-background to-transparent z-10 pointer-events-none" />
-      )}
       {children}
     </div>
   )
@@ -1078,7 +1068,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
           className="min-h-0 flex-1 overflow-y-auto"
           role="log"
         >
-          <div className="flex flex-col gap-4 p-4">
+          <div className="flex flex-col gap-4 py-2 pr-2">
             {(() => {
               const messagesToRender = [...visibleMessages]
               if ((status === 'submitted' || status === 'streaming') && messagesToRender.length > 0 && messagesToRender[messagesToRender.length - 1].role !== 'assistant') {
@@ -1123,7 +1113,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                               </Message>
                             )}
                             <div
-                              className={`flex items-center gap-2 p-3 rounded-md border bg-muted/30 transition-shadow ${isCodeStreamingNow ? 'shadow-[0_0_15px_hsl(var(--primary)/0.4)] animate-pulse' : 'cursor-pointer hover:bg-muted/50'}`}
+                              className={`flex items-center gap-2 rounded-xl border border-border/60 p-3 transition-shadow ${isCodeStreamingNow ? 'shadow-[0_0_15px_hsl(var(--primary)/0.4)] animate-pulse' : 'cursor-pointer hover:bg-muted/70'}`}
                               onClick={() => {
                                 if (!isCodeStreamingNow) {
                                   const code = extractStrudelCode(fullText)
@@ -1188,7 +1178,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                                 return (
                                   <div
                                     key={i}
-                                    className={`flex items-center gap-2 p-3 rounded-md border bg-muted/30 transition-shadow ${isLoading ? 'shadow-[0_0_15px_hsl(var(--primary)/0.4)] animate-pulse' : ''} ${isCompleted ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                                    className={`flex items-center gap-2 rounded-xl border border-border/60 p-3 transition-shadow ${isLoading ? 'shadow-[0_0_15px_hsl(var(--primary)/0.4)] animate-pulse' : ''} ${isCompleted ? 'cursor-pointer hover:bg-muted/70' : ''}`}
                                     onClick={() => {
                                       if (isCompleted && onToolClickRef.current && 'output' in part) {
                                         onToolClickRef.current('generateStrudelCode', part.output)

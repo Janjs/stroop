@@ -1,38 +1,34 @@
 'use client'
 
-import * as React from 'react'
-import { useTheme } from 'next-themes'
-
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { SidebarMenuButton } from '@/components/ui/sidebar'
 import { Icons } from '@/components/icons'
+import { AppearanceSettings } from '@/components/appearance-settings'
 
-export default function ModeToggle() {
-  const { setTheme } = useTheme()
-
+export default function ModeToggle({ variant = 'header' }: { variant?: 'header' | 'sidebar' }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <Icons.sun className="rotate-0 scale-100 dark:-rotate-90 dark:scale-0" />
-          <Icons.moon className="absolute rotate-90 scale-0 dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">Toggle theme</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="bg-background">
-        <DropdownMenuItem onClick={() => setTheme('light')}>
-          <Icons.sun className="mr-2 h-4 w-4" />
-          <span>Light</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('dark')}>
-          <Icons.moon className="mr-2 h-4 w-4" />
-          <span>Dark</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme('system')}>
-          <Icons.laptop className="mr-2 h-4 w-4" />
-          <span>System</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Popover>
+      <PopoverTrigger asChild>
+        {variant === 'sidebar' ? (
+          <SidebarMenuButton tooltip="Settings">
+            <Icons.settings className="size-3.5" />
+            <span>Settings</span>
+          </SidebarMenuButton>
+        ) : (
+          <Button variant="ghost" size="icon">
+            <Icons.settings />
+            <span className="sr-only">Appearance settings</span>
+          </Button>
+        )}
+      </PopoverTrigger>
+      <PopoverContent
+        align={variant === 'sidebar' ? 'start' : 'end'}
+        side={variant === 'sidebar' ? 'right' : 'bottom'}
+        className="w-72 p-0"
+      >
+        <AppearanceSettings />
+      </PopoverContent>
+    </Popover>
   )
 }

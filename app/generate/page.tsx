@@ -13,11 +13,14 @@ import StrudelCodeViewer, { type StrudelCodeViewerHandle, type StrudelPlayerStat
 import { MobileCodePlayerBar } from '@/components/generate-new/mobile-code-player-bar'
 import { cn } from '@/lib/utils'
 import { SidebarTrigger } from '@/components/ui/sidebar'
+import { Button } from '@/components/ui/button'
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from '@/components/ui/resizable'
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { usePanelRef } from 'react-resizable-panels'
 import { useConvexAuth, useQuery, useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
@@ -25,6 +28,9 @@ import { DEFAULT_CHAT_TITLE, generateChatTitleFromCode } from '@/lib/chat-title'
 import { useAnonymousSession } from '@/hooks/useAnonymousSession'
 
 export const dynamic = 'force-dynamic'
+
+const CHAT_PANEL_DEFAULT_WIDTH = 480
+const CHAT_PANEL_ANIMATION_MS = 200
 
 const GenerateContent = () => {
   const [snippets, setSnippets] = useState<StrudelSnippet[]>([])
@@ -45,6 +51,11 @@ const GenerateContent = () => {
     canPlay: false,
   })
   const userDismissedDrawerRef = useRef(false)
+  const chatPanelRef = usePanelRef()
+  const savedChatWidthRef = useRef(CHAT_PANEL_DEFAULT_WIDTH)
+  const chatAnimationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isChatCollapsed, setIsChatCollapsed] = useState(false)
+  const [isChatAnimating, setIsChatAnimating] = useState(false)
 
   const prompt = searchParams.get('prompt') || undefined
   const chatId = searchParams.get('chatId') || undefined
@@ -302,6 +313,61 @@ const GenerateContent = () => {
     setPlayerState(state)
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (chatAnimationTimeoutRef.current !== null) {
+        clearTimeout(chatAnimationTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  const finishChatPanelAnimation = useCallback((collapsed: boolean) => {
+    chatAnimationTimeoutRef.current = null
+    setIsChatAnimating(false)
+    setIsChatCollapsed(collapsed)
+  }, [])
+
+  const handleChatPanelResize = useCallback((size: { inPixels: number }) => {
+    const collapsed = size.inPixels <= 1
+    setIsChatCollapsed(collapsed)
+    if (!collapsed && !isChatAnimating) {
+      savedChatWidthRef.current = size.inPixels
+    }
+  }, [isChatAnimating])
+
+  const toggleChatPanel = useCallback(() => {
+    const panel = chatPanelRef.current
+    if (!panel || isChatAnimating) return
+
+    if (chatAnimationTimeoutRef.current !== null) {
+      clearTimeout(chatAnimationTimeoutRef.current)
+    }
+
+    if (isChatCollapsed || panel.isCollapsed()) {
+      const target = savedChatWidthRef.current
+      if (panel.isCollapsed()) {
+        panel.expand()
+        panel.resize(0)
+      }
+      setIsChatAnimating(true)
+      requestAnimationFrame(() => {
+        panel.resize(target)
+        chatAnimationTimeoutRef.current = setTimeout(() => {
+          finishChatPanelAnimation(false)
+        }, CHAT_PANEL_ANIMATION_MS)
+      })
+      return
+    }
+
+    savedChatWidthRef.current = panel.getSize().inPixels || savedChatWidthRef.current
+    setIsChatAnimating(true)
+    panel.resize(0)
+    chatAnimationTimeoutRef.current = setTimeout(() => {
+      panel.collapse()
+      finishChatPanelAnimation(true)
+    }, CHAT_PANEL_ANIMATION_MS)
+  }, [chatPanelRef, finishChatPanelAnimation, isChatAnimating, isChatCollapsed])
+
   const codeViewer = (
     <StrudelCodeViewer
       ref={editorRef}
@@ -345,6 +411,18 @@ const GenerateContent = () => {
         <h2 className="min-w-0 flex-1 font-outfit text-base">
           <ChatTitleLabel title={displayTitle} isHovered={isTitleHovered} />
         </h2>
+        {!isMobile && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0"
+            onClick={toggleChatPanel}
+            aria-label="Collapse chat"
+          >
+            <PanelLeftClose className="size-4" />
+          </Button>
+        )}
       </div>
       {error && (
         <Alert variant="destructive" className="shrink-0">
@@ -374,17 +452,17 @@ const GenerateContent = () => {
   )
 
   return (
-    <div className="flex h-full min-h-0 w-full max-w-full flex-1 overflow-hidden p-4">
+    <div className="flex h-full min-h-0 w-full max-w-full flex-1 overflow-hidden">
       {isMobile ? (
         <>
-          <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+          <div className="generate-chat-panel flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden p-4">
             {chatPanel}
           </div>
           <div
             aria-hidden={!isDrawerOpen}
             className={cn(
-              'fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[10px] border bg-background shadow-lg transition-[height] duration-300 ease-out',
-              isDrawerOpen ? 'h-[85vh] p-4' : 'pointer-events-none h-0 overflow-hidden border-transparent p-0 opacity-0',
+              'generate-strudel-panel fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl transition-[height] duration-300 ease-out',
+              isDrawerOpen ? 'h-[85vh] p-4' : 'pointer-events-none h-0 overflow-hidden p-0 opacity-0',
             )}
           >
             <div className={cn('mx-auto mb-4 h-2 w-[100px] shrink-0 rounded-full bg-muted', !isDrawerOpen && 'hidden')} />
@@ -403,17 +481,45 @@ const GenerateContent = () => {
           )}
         </>
       ) : (
-        <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+        <ResizablePanelGroup
+          orientation="horizontal"
+          className="min-h-0 flex-1"
+          data-panel-animating={isChatAnimating ? '' : undefined}
+        >
           <ResizablePanel
-            defaultSize={480}
+            id="generate-chat"
+            defaultSize={CHAT_PANEL_DEFAULT_WIDTH}
             minSize={288}
             maxSize="50%"
-            className="flex min-h-0 flex-col gap-4"
+            collapsible
+            panelRef={chatPanelRef}
+            onResize={handleChatPanelResize}
+            className="generate-chat-panel flex min-h-0 flex-col gap-3 overflow-hidden border-r border-border/25 p-4"
           >
             {chatPanel}
           </ResizablePanel>
-          <ResizableHandle className="w-4 bg-transparent after:w-full" />
-          <ResizablePanel minSize={400} className="min-h-0 overflow-hidden">
+          <ResizableHandle disabled={isChatCollapsed} className="w-px bg-border/25 after:hidden" />
+          <ResizablePanel
+            minSize={400}
+            className="generate-strudel-panel relative min-h-0 overflow-hidden"
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={cn(
+                'absolute left-2 top-4 z-10 size-8 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none',
+                isChatCollapsed
+                  ? 'translate-x-0 opacity-100'
+                  : 'pointer-events-none -translate-x-1 opacity-0',
+              )}
+              onClick={toggleChatPanel}
+              aria-label="Expand chat"
+              aria-hidden={!isChatCollapsed}
+              tabIndex={isChatCollapsed ? 0 : -1}
+            >
+              <PanelLeftOpen className="size-4" />
+            </Button>
             {codeViewer}
           </ResizablePanel>
         </ResizablePanelGroup>
