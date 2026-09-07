@@ -46,10 +46,8 @@ import { Badge } from '@/components/ui/badge'
 import { ChevronDownIcon, ArrowDownIcon, XIcon } from 'lucide-react'
 import { MessageSelectionContext } from '@/components/generate-new/message-selection-context'
 
+import { applyMoodBackground, GENRES, MOODS } from '@/lib/prompt-suggestions'
 import { TEMPO_LABELS } from '@/lib/tempo-suggestions'
-
-const MOODS = ['Happy', 'Sad', 'Dreamy', 'Energetic', 'Chill', 'Melancholic', 'Romantic', 'Mysterious']
-const GENRES = ['Jazz', 'Pop', 'R&B', 'Classical', 'Lo-fi', 'Rock', 'Blues', 'Folk']
 
 const extractStrudelCode = (text: string): string | null => {
   const marker = '```strudel\n'
@@ -862,6 +860,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
   const handleMoodClick = (mood: string) => {
     setSelectedMood(selectedMood === mood ? null : mood)
+    if (selectedMood !== mood) applyMoodBackground(mood, true)
   }
 
   const handleGenreClick = (genre: string) => {
@@ -1264,9 +1263,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
               {MOODS.map((mood) => (
                 <Suggestion
                   size="sm"
-                  key={mood}
-                  suggestion={mood}
-                  selected={selectedMood === mood}
+                  key={mood.label}
+                  suggestion={mood.label}
+                  preview={'preview' in mood ? mood.preview : undefined}
+                  selected={selectedMood === mood.label}
                   onClick={handleMoodClick}
                 />
               ))}

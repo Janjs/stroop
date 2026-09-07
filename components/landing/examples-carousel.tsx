@@ -472,7 +472,7 @@ ${tokenRules}
         <CarouselContent>
           {EXAMPLES.map((example, i) => (
             <CarouselItem key={i}>
-              <Card className="overflow-hidden">
+              <Card className="mx-3 mt-3 mb-6">
                 <CardHeader className="pb-2 px-5 pt-4">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-semibold font-outfit">
@@ -525,19 +525,24 @@ ${tokenRules}
                         )}
                     </div>
                   </div>
-                  <Link
-                    href={`/generate?prompt=${encodeURIComponent(example.prompt)}`}
-                    onClick={stopPlayback}
-                  >
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1.5 px-2 -ml-2"
+                  <div className="flex flex-wrap items-center gap-4">
+                    <Link
+                      href={`/generate?prompt=${encodeURIComponent(example.prompt)}`}
+                      onClick={stopPlayback}
+                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
                     >
                       Try this prompt
-                      <Icons.arrowRight className="h-3 w-3" />
-                    </Button>
-                  </Link>
+                      <Icons.arrowRight className="size-3" />
+                    </Link>
+                    <Link
+                      href="/generate"
+                      onClick={stopPlayback}
+                      className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Open a new chat
+                      <Icons.add className="size-3" />
+                    </Link>
+                  </div>
                 </CardContent>
               </Card>
             </CarouselItem>

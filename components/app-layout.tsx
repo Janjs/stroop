@@ -28,7 +28,7 @@ export function AppLayout({ children, defaultOpenFromCookie, hasSavedPreference 
     >
       <AppSidebar />
       <SidebarInset className="bg-transparent">
-        <div className="h-[100dvh] flex flex-col min-w-0">
+        <div className="relative z-[1] flex h-[100dvh] min-w-0 flex-col">
           <Header />
           <div className="flex flex-1 min-h-0 overflow-auto justify-center min-w-0">{children}</div>
         </div>

@@ -4,6 +4,36 @@
 
 @plugin "tailwindcss-animate";
 
+@property --background { syntax: "<color>"; inherits: true; initial-value: oklch(0.975 0 0); }
+@property --foreground { syntax: "<color>"; inherits: true; initial-value: oklch(0.22 0 0); }
+@property --card { syntax: "<color>"; inherits: true; initial-value: oklch(0.995 0 0); }
+@property --card-foreground { syntax: "<color>"; inherits: true; initial-value: oklch(0.22 0 0); }
+@property --popover { syntax: "<color>"; inherits: true; initial-value: oklch(0.995 0 0 / 0.92); }
+@property --popover-foreground { syntax: "<color>"; inherits: true; initial-value: oklch(0.22 0 0); }
+@property --primary { syntax: "<color>"; inherits: true; initial-value: oklch(0.5 0.08 195); }
+@property --primary-foreground { syntax: "<color>"; inherits: true; initial-value: oklch(0.99 0 0); }
+@property --secondary { syntax: "<color>"; inherits: true; initial-value: oklch(0.94 0 0); }
+@property --secondary-foreground { syntax: "<color>"; inherits: true; initial-value: oklch(0.32 0 0); }
+@property --muted { syntax: "<color>"; inherits: true; initial-value: oklch(0.945 0 0); }
+@property --muted-foreground { syntax: "<color>"; inherits: true; initial-value: oklch(0.48 0 0); }
+@property --accent { syntax: "<color>"; inherits: true; initial-value: oklch(0.93 0.015 195); }
+@property --accent-foreground { syntax: "<color>"; inherits: true; initial-value: oklch(0.3 0.05 195); }
+@property --border { syntax: "<color>"; inherits: true; initial-value: oklch(0.88 0 0); }
+@property --input { syntax: "<color>"; inherits: true; initial-value: oklch(0.88 0 0); }
+@property --ring { syntax: "<color>"; inherits: true; initial-value: oklch(0.5 0.08 195); }
+@property --editor-primary { syntax: "<color>"; inherits: true; initial-value: oklch(0.68 0.2 70); }
+@property --editor-accent { syntax: "<color>"; inherits: true; initial-value: oklch(0.9869 0.0214 95.2774); }
+@property --editor-accent-foreground { syntax: "<color>"; inherits: true; initial-value: oklch(0.45 0.16 46); }
+@property --editor-ring { syntax: "<color>"; inherits: true; initial-value: oklch(0.5 0.14 195); }
+@property --sidebar { syntax: "<color>"; inherits: true; initial-value: oklch(0.965 0 0 / 0.88); }
+@property --sidebar-foreground { syntax: "<color>"; inherits: true; initial-value: oklch(0.25 0 0); }
+@property --sidebar-primary { syntax: "<color>"; inherits: true; initial-value: oklch(0.5 0.08 195); }
+@property --sidebar-primary-foreground { syntax: "<color>"; inherits: true; initial-value: oklch(1 0 0); }
+@property --sidebar-accent { syntax: "<color>"; inherits: true; initial-value: oklch(0.93 0.015 195); }
+@property --sidebar-accent-foreground { syntax: "<color>"; inherits: true; initial-value: oklch(0.3 0.05 195); }
+@property --sidebar-border { syntax: "<color>"; inherits: true; initial-value: oklch(0.88 0 0); }
+@property --sidebar-ring { syntax: "<color>"; inherits: true; initial-value: oklch(0.5 0.08 195); }
+
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -222,6 +252,7 @@
 
   body {
     @apply bg-background text-foreground;
+    isolation: isolate;
     letter-spacing: var(--tracking-normal);
   }
 }
@@ -341,6 +372,7 @@
 
   body {
     @apply bg-background text-foreground;
+    isolation: isolate;
     letter-spacing: var(--tracking-normal);
   }
 }
@@ -635,6 +667,17 @@ html:not([data-background="none"]) body {
   background-blend-mode: multiply, soft-light, normal;
 }
 
+html:not([data-background="none"]) [data-bg-reveal] {
+  background-image:
+    var(--app-dither),
+    linear-gradient(oklch(1 0 0 / 0.06), oklch(0.25 0.02 200 / 0.06)),
+    var(--reveal-wallpaper);
+  background-position: 0 0, center, center;
+  background-size: 5px 5px, cover, cover;
+  background-repeat: repeat, no-repeat, no-repeat;
+  background-blend-mode: multiply, soft-light, normal;
+}
+
 html[data-background="clouds"] body {
   isolation: isolate;
   background-image:
@@ -646,11 +689,32 @@ html[data-background="clouds"] body {
   background-blend-mode: soft-light, normal;
 }
 
+html[data-background="clouds"] [data-bg-reveal] {
+  background-image:
+    linear-gradient(oklch(1 0 0 / 0.06), oklch(0.25 0.02 200 / 0.06)),
+    var(--reveal-wallpaper);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-blend-mode: soft-light, normal;
+}
+
 html[data-background="clouds"] body::after {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
+  pointer-events: none;
+  background: var(--app-dither) repeat;
+  background-size: 6px 6px;
+  mix-blend-mode: multiply;
+  opacity: 0.5;
+}
+
+html[data-background="clouds"] [data-bg-reveal]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
   pointer-events: none;
   background: var(--app-dither) repeat;
   background-size: 6px 6px;

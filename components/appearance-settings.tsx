@@ -7,7 +7,10 @@ import { Icons } from '@/components/icons'
 import { Slider } from '@/components/ui/slider'
 import { cn } from '@/lib/utils'
 import {
+  applyBackground,
   applyPanelOpacity,
+  BACKGROUNDS,
+  type BackgroundId,
   DEFAULT_PANEL_OPACITY,
   MAX_PANEL_OPACITY,
   MIN_PANEL_OPACITY,
@@ -15,32 +18,22 @@ import {
   storePanelOpacity,
 } from '@/lib/appearance'
 
-const BACKGROUNDS = [
-  { id: 'none', label: 'None', image: undefined },
-  { id: 'clouds', label: 'Clouds', image: '/backgrounds/clouds.webp' },
-  { id: 'forest', label: 'Forest', image: '/backgrounds/forest.webp' },
-  { id: 'dusk', label: 'Dusk', image: '/backgrounds/dusk.webp' },
-] as const
-
-type Background = (typeof BACKGROUNDS)[number]['id']
-
 export function AppearanceSettings() {
   const { theme, setTheme } = useTheme()
-  const [background, setBackground] = useState<Background>('none')
+  const [background, setBackground] = useState<BackgroundId>('none')
   const [panelOpacity, setPanelOpacity] = useState(DEFAULT_PANEL_OPACITY)
 
   useEffect(() => {
-    const saved = localStorage.getItem('background') as Background | null
+    const saved = localStorage.getItem('background') as BackgroundId | null
     if (BACKGROUNDS.some((option) => option.id === saved)) setBackground(saved!)
     const opacity = readStoredPanelOpacity()
     setPanelOpacity(opacity)
     applyPanelOpacity(opacity)
   }, [])
 
-  const chooseBackground = (value: Background) => {
+  const chooseBackground = (value: BackgroundId) => {
     setBackground(value)
-    localStorage.setItem('background', value)
-    document.documentElement.dataset.background = value
+    applyBackground(value)
   }
 
   const choosePanelOpacity = (value: number[]) => {
@@ -99,13 +92,16 @@ export function AppearanceSettings() {
                 background === option.id
                   ? 'border-primary ring-2 ring-primary/20'
                   : 'border-border/70 hover:border-foreground/25',
-                !option.image && 'bg-muted',
+                !('image' in option) && 'bg-muted',
               )}
-              style={option.image ? { backgroundImage: `url(${option.image})`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
+              style={'image' in option ? { backgroundImage: `url(${option.image})`, backgroundPosition: 'center', backgroundSize: 'cover' } : undefined}
             >
-              <span className={cn('absolute inset-0', option.image ? 'bg-gradient-to-t from-black/60 via-black/5 to-transparent' : 'bg-[radial-gradient(circle_at_50%_35%,var(--card),var(--muted))]')} />
-              <span className={cn('absolute inset-x-2 bottom-1.5 text-xs font-semibold', option.image ? 'text-white' : 'text-foreground')}>
-                {option.label}
+              <span className={cn('absolute inset-0', 'image' in option ? 'bg-gradient-to-t from-black/60 via-black/5 to-transparent' : 'bg-[radial-gradient(circle_at_50%_35%,var(--card),var(--muted))]')} />
+              <span className={cn('absolute inset-x-2 bottom-1.5', 'image' in option ? 'text-white' : 'text-foreground')}>
+                <span className="block text-xs font-semibold">{'mood' in option ? option.mood : option.label}</span>
+                {'mood' in option && (
+                  <span className="block text-[10px] font-medium opacity-80">{option.label}</span>
+                )}
               </span>
               {background === option.id && (
                 <span className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm">

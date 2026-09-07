@@ -1,47 +1,22 @@
-'use client'
-
-import { Icons } from '@/components/icons'
-import { Button } from '@/components/ui/button'
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
-import { GITHUB_LINK, TWITTER_LINK } from '@/lib/utils'
-import { navigateToGithub } from './_actions'
-import { usePathname } from 'next/navigation'
+import { Badge } from '@/components/ui/badge'
 
 export default function Footer() {
-  const pathname = usePathname()
   return (
-    <div
-      className={`
-    ${pathname === '/' ? 'pt-6 bg-gradient-to-t from-background from-60%' : 'hidden'}
-    md:flex gap-4 items-center justify-end px-4 flex-shrink-0
-    `}
+    <a
+      href="https://janjs.dev/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="fixed bottom-5 right-5 z-10 md:right-10 lg:right-16"
     >
-      <p className="max-w-7xl w-full px-4 pb-2 text-right text-xs text-muted-foreground">
-        <HoverCard>
-          <HoverCardTrigger className="hover:cursor-pointer">
-            💻 by{' '}
-            <Button
-              onClick={(e) => navigateToGithub()}
-              variant="link"
-              className="hover:underline hover:underline-offset-4 text-xs p-0 h-auto"
-            >
-              @Janjs.
-            </Button>{' '}
-          </HoverCardTrigger>
-          <HoverCardContent className="w-25">
-            <div className="grid grid-rows-2 gap-4 text-start text-md text-foreground items-center">
-              <a href={GITHUB_LINK} className="flex items-center">
-                <Icons.gitHub className="w-3 h-3 mr-2 inline text-muted-foreground" />{' '}
-                <p className="inline hover:underline hover:underline-offset-4">Janjs</p>
-              </a>
-              <a href={TWITTER_LINK} className="flex items-center">
-                <Icons.twitter className="w-3 h-3 mr-2 inline text-muted-foreground hover:underline hover:underline-offset-4" />{' '}
-                <p className="inline hover:underline hover:underline-offset-4">Janjijs</p>
-              </a>
-            </div>
-          </HoverCardContent>
-        </HoverCard>
-      </p>
-    </div>
+      <span className="hidden text-xs text-muted-foreground underline-offset-4 hover:underline md:inline">
+        Made by janjs
+      </span>
+      <Badge
+        variant="outline"
+        className="border-white/40 bg-card/70 px-3 shadow-sm backdrop-blur-xl dark:border-white/10 md:hidden"
+      >
+        Made by janjs
+      </Badge>
+    </a>
   )
 }

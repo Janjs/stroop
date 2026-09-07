@@ -3,8 +3,6 @@
 import { GenerateStrudelRequest, GenerateStrudelResponse } from '@/types/types'
 import { generateObject } from 'ai'
 import { openai } from '@ai-sdk/openai'
-import { redirect } from 'next/navigation'
-import { GITHUB_LINK } from '@/lib/utils'
 import { revalidatePath } from 'next/cache'
 import { parseStrudelSnippets, StrudelSnippetsSchema } from '@/lib/strudel-generation'
 import { DEFAULT_OPENAI_MODEL } from '@/lib/models'
@@ -33,10 +31,6 @@ export const generateStrudelSnippets = async (
   } catch (error: any) {
     return { error: error.message || 'Error while generating Strudel snippets.' }
   }
-}
-
-export const navigateToGithub = async () => {
-  redirect(GITHUB_LINK)
 }
 
 export const reGenerate = async () => {

@@ -17,6 +17,7 @@ import {
   Suggestion,
 } from '@/components/ai-elements/suggestion'
 import { Label } from '@/components/ui/label'
+import { applyMoodBackground, GENRES, MOODS } from '@/lib/prompt-suggestions'
 import { TEMPO_LABELS } from '@/lib/tempo-suggestions'
 
 function SuggestionsWithFade({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -60,9 +61,6 @@ function SuggestionsWithFade({ children, className }: { children: React.ReactNod
   )
 }
 
-const MOODS = ['Happy', 'Sad', 'Dreamy', 'Energetic', 'Chill', 'Melancholic', 'Romantic', 'Mysterious']
-const GENRES = ['Jazz', 'Pop', 'R&B', 'Classical', 'Lo-fi', 'Rock', 'Blues', 'Folk']
-
 function constructPrompt(mood: string | null, genre: string | null, tempo: string | null) {
   const parts: string[] = []
   if (mood) parts.push(mood)
@@ -80,8 +78,11 @@ function LandingInputContent() {
   const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleMoodClick = (mood: string) =>
+  const handleMoodClick = (mood: string) => {
     setSelectedMood((prev) => (prev === mood ? null : mood))
+    if (selectedMood === mood) return
+    applyMoodBackground(mood, true)
+  }
   const handleGenreClick = (genre: string) =>
     setSelectedGenre((prev) => (prev === genre ? null : genre))
   const handleTempoClick = (tempo: string) =>
@@ -120,9 +121,10 @@ function LandingInputContent() {
             {MOODS.map((mood) => (
               <Suggestion
                 size="sm"
-                key={mood}
-                suggestion={mood}
-                selected={selectedMood === mood}
+                key={mood.label}
+                suggestion={mood.label}
+                preview={'preview' in mood ? mood.preview : undefined}
+                selected={selectedMood === mood.label}
                 onClick={handleMoodClick}
               />
             ))}

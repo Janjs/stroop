@@ -45,7 +45,7 @@ export default function Header() {
           )}
         </div>
         {showSignedOutHeader ? (
-          <div className="flex gap-3 ml-auto items-center">
+          <div className="flex gap-2 ml-auto items-center">
             <AuthButton />
           </div>
         ) : null}
