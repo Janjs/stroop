@@ -1094,7 +1094,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         <Alert className="mb-4 shrink-0">
           <AlertTitle>Subscribe to keep generating</AlertTitle>
           <AlertDescription className="flex items-center justify-between gap-3">
-            <span>Subscribe to keep generating with Luna, Terra, or Sol.</span>
+            <span>Subscribe to keep generating.</span>
             <Button size="sm" onClick={() => setSubscribeOpen(true)}>
               Subscribe
             </Button>

@@ -51,7 +51,7 @@ export const LEGAL_PAGES = {
       },
       {
         heading: 'Subscription',
-        body: 'Stroop Pro is $5 per month, billed by Polar. It is required after you sign in and includes Luna, Terra, and Sol plus a monthly usage allowance. Better models use more of that allowance. You can cancel anytime in the customer portal; access continues until the end of the paid period. Prices are shown at checkout and include applicable taxes Polar collects as merchant of record.',
+        body: 'Stroop Pro is $5 per month, billed by Polar. It is required after you sign in and includes every model in the picker plus a monthly usage allowance. Better models use more of that allowance. You can cancel anytime in the customer portal; access continues until the end of the paid period. Prices are shown at checkout and include applicable taxes Polar collects as merchant of record.',
       },
       {
         heading: 'Acceptable use',

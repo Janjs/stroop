@@ -15,7 +15,7 @@ import { Icons } from '@/components/icons'
 import { SUBSCRIPTION_PRICE } from '@/lib/models'
 
 const FEATURES = [
-  { icon: Music, label: 'Luna, Terra, and Sol on every prompt' },
+  { icon: Music, label: 'Claude, Grok, Kimi, and GPT on every prompt' },
   { icon: RefreshCw, label: 'Usage resets every month' },
   { icon: Unlock, label: 'Cancel whenever you want' },
 ] as const
@@ -64,7 +64,7 @@ export function SubscribeDialog({ open, onOpenChange, required }: SubscribeDialo
             Sign up for Stroop Pro
           </DialogTitle>
           <DialogDescription className="text-pretty leading-relaxed">
-            Keep generating with Luna, Terra, or Sol. ${SUBSCRIPTION_PRICE}/month, cancel anytime.
+            Keep generating with every model. ${SUBSCRIPTION_PRICE}/month, cancel anytime.
           </DialogDescription>
         </DialogHeader>
         <ul className="mx-auto w-fit space-y-4">

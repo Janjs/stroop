@@ -138,6 +138,7 @@ function languageModel(modelId: string) {
     })
     return openrouter(spec.openrouter)
   }
+  if (!('openai' in spec) || !spec.openai) throw new Error('This model needs OPENROUTER_API_KEY')
   return openaiProvider(spec.openai)
 }
 

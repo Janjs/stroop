@@ -12,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ provider: string }> }
 ) {
   const { provider } = await params
-  const convexBackendUrl = process.env.NEXT_PUBLIC_CONVEX_URL || 'https://backend.stroop.janjs.dev'
+  const convexBackendUrl = process.env.NEXT_PUBLIC_CONVEX_URL!
   const targetUrl = `${convexBackendUrl}/http/api/auth/signin/${provider}${request.nextUrl.search}`
 
   console.log('Proxying signin request to:', targetUrl)
