@@ -62,11 +62,11 @@ The app uses a self-hosted Convex backend.
 
 **Next.js app (Coolify)** — set **NEXT_PUBLIC_CONVEX_URL** to the **Convex backend** URL (e.g. `https://backend.stroop.janjs.dev`). The frontend talks to Convex at this URL. Do not set it to the Next.js app URL.
 
-**Convex backend** — set **CONVEX_SITE_ORIGIN** to the **Next.js app** URL (e.g. `https://stroop.janjs.dev`). OAuth callbacks go here, not to the backend.
+**Convex backend** — set **CONVEX_SITE_ORIGIN** to the **Next.js app** URL (e.g. `https://stroop.app`). OAuth callbacks go here, not to the backend.
 
 ## 🔗 Demo
 
-**[stroop.janjs.dev](https://stroop.janjs.dev)**
+**[stroop.app](https://stroop.app)**
 
 ## 👤 Author
 

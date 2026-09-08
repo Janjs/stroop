@@ -53,6 +53,7 @@ jobs:
           pnpm exec convex env set SITE_URL="${{ vars.CUSTOM_AUTH_SITE_URL || secrets.CUSTOM_AUTH_SITE_URL }}"
           pnpm exec convex env set GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
           pnpm exec convex env set GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}"
+          pnpm exec convex env set POLAR_WEBHOOK_SECRET -- "${{ secrets.POLAR_WEBHOOK_SECRET }}"
           pnpm exec convex env set JWT_PRIVATE_KEY -- "${{ secrets.JWT_PRIVATE_KEY }}"
           printf '%s\n' "$JWKS_SECRET" | pnpm exec convex env set JWKS
         env:

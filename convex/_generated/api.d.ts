@@ -10,6 +10,7 @@
 
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as billing from "../billing.js";
 import type * as cache from "../cache.js";
 import type * as chats from "../chats.js";
 import type * as credits from "../credits.js";
@@ -33,6 +34,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
+  billing: typeof billing;
   cache: typeof cache;
   chats: typeof chats;
   credits: typeof credits;

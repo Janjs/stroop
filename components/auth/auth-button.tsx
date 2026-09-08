@@ -8,7 +8,9 @@ import { useSignIn } from '@/hooks/useSignIn'
 import { Button } from '@/components/ui/button'
 import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
-import { useAnonymousSession } from '@/hooks/useAnonymousSession'
+import { SubscribeDialog } from '@/components/billing/subscribe-dialog'
+import { useBilling } from '@/hooks/useBilling'
+import { UsageMeter } from '@/components/billing/usage-meter'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -22,7 +24,6 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
 import { Icons } from '@/components/icons'
-import { Badge } from '@/components/ui/badge'
 import About from '@/components/about'
 import ModeToggle from '@/components/mode-toggle'
 import { AppearanceSettings } from '@/components/appearance-settings'
@@ -39,10 +40,10 @@ type UserMenuProps = {
     image?: unknown
   } | null | undefined
   initials: string
-  credits: {
-    isAuthenticated?: boolean
-    credits?: number | null
-  } | null | undefined
+  usage: ReturnType<typeof useBilling>
+  onSubscribe: () => void
+  onManage: () => void
+  isBillingBusy?: boolean
   onSignOut: () => void
   trigger: ReactNode
   align?: 'start' | 'end'
@@ -52,14 +53,25 @@ type UserMenuProps = {
 function UserMenu({
   user,
   initials,
-  credits,
+  usage,
+  onSubscribe,
+  onManage,
+  isBillingBusy,
   onSignOut,
   trigger,
   align = 'end',
   side = 'bottom',
 }: UserMenuProps) {
+  const [open, setOpen] = useState(false)
+
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(next) => {
+        if (isBillingBusy && !next) return
+        setOpen(next)
+      }}
+    >
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align={align} side={side} className="w-72 p-0">
         <div className="px-3 py-2.5">
@@ -73,19 +85,25 @@ function UserMenu({
         <AppearanceSettings />
         <DropdownMenuSeparator />
         <div className="p-1">
-          <div className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm w-full">
-            <Icons.credits className="h-4 w-4" />
-            <span>Credits</span>
-            {credits && (
-              <Badge variant="outline" className="ml-auto text-xs">
-                {credits.isAuthenticated
-                  ? credits.credits === null || credits.credits === undefined
-                    ? 'free'
-                    : credits.credits.toFixed(2)
-                  : `${credits.credits ?? 0} / 3`}
-              </Badge>
-            )}
-          </div>
+          {usage && <UsageMeter usage={usage} />}
+          {usage?.isSubscribed ? (
+            <DropdownMenuItem
+              disabled={isBillingBusy}
+              className="cursor-pointer"
+              onSelect={(event) => {
+                event.preventDefault()
+                onManage()
+              }}
+            >
+              {isBillingBusy ? <Icons.spinner className="h-4 w-4 animate-spin" /> : <Icons.pricing className="h-4 w-4" />}
+              <span>Manage plan</span>
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={onSubscribe} className="cursor-pointer">
+              <Icons.pricing className="h-4 w-4" />
+              <span>Subscribe · $5/mo</span>
+            </DropdownMenuItem>
+          )}
           <About />
         </div>
         <DropdownMenuSeparator />
@@ -130,9 +148,10 @@ function SidebarAuthButton() {
   const { signOut } = useAuthActions()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const anonymousSessionId = useAnonymousSession()
-  const credits = useQuery(api.credits.getCredits, { anonymousSessionId: anonymousSessionId ?? undefined })
+  const usage = useBilling()
   const user = useQuery(api.user.getCurrentUser)
+  const [subscribeOpen, setSubscribeOpen] = useState(false)
+  const [isBillingBusy, setIsBillingBusy] = useState(false)
   const router = useRouter()
 
   const isGeneratePage = pathname.startsWith('/generate')
@@ -160,10 +179,24 @@ function SidebarAuthButton() {
 
     return (
       <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+        <SubscribeDialog open={subscribeOpen} onOpenChange={setSubscribeOpen} />
         <UserMenu
           user={user}
           initials={initials}
-          credits={credits}
+          usage={usage}
+          onSubscribe={() => setSubscribeOpen(true)}
+          onManage={async () => {
+            setIsBillingBusy(true)
+            try {
+              const response = await fetch('/api/billing/portal', { method: 'POST' })
+              const data = (await response.json().catch(() => ({}))) as { url?: string; error?: string }
+              if (!response.ok || !data.url) throw new Error(data.error || 'Could not open portal')
+              window.location.assign(data.url)
+            } catch {
+              setIsBillingBusy(false)
+            }
+          }}
+          isBillingBusy={isBillingBusy}
           onSignOut={handleSignOut}
           align="start"
           side="top"

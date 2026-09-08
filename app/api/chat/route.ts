@@ -1,6 +1,9 @@
 import { streamText, convertToModelMessages, UIMessage, smoothStream } from 'ai'
-import { openai as openaiProvider } from '@ai-sdk/openai'
-import { DEFAULT_OPENAI_MODEL } from '@/lib/models'
+import { createOpenAI, openai as openaiProvider } from '@ai-sdk/openai'
+import { convexAuthNextjsToken } from '@convex-dev/auth/nextjs/server'
+import { ConvexHttpClient } from 'convex/browser'
+import { api } from '@/convex/_generated/api'
+import { DEFAULT_OPENAI_MODEL, estimateUsageCents, getModel } from '@/lib/models'
 import { readFile } from 'fs/promises'
 import path from 'path'
 
@@ -122,6 +125,28 @@ async function getStrudelApiReference(): Promise<string> {
   return strudelApiReferenceCache
 }
 
+function languageModel(modelId: string) {
+  const spec = getModel(modelId)
+  if (process.env.OPENROUTER_API_KEY) {
+    const openrouter = createOpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: 'https://openrouter.ai/api/v1',
+      headers: {
+        'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://stroop.app',
+        'X-Title': 'Stroop',
+      },
+    })
+    return openrouter(spec.openrouter)
+  }
+  return openaiProvider(spec.openai)
+}
+
+function convexClient(token?: string) {
+  const client = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
+  if (token) client.setAuth(token)
+  return client
+}
+
 export async function POST(req: Request) {
   try {
     const {
@@ -130,13 +155,31 @@ export async function POST(req: Request) {
       currentCode,
       repairContext,
       selectionContext,
+      anonymousSessionId,
     }: {
       messages: UIMessage[]
       model?: string
       currentCode?: string
       repairContext?: RepairContext
       selectionContext?: SelectionContext
+      anonymousSessionId?: string
     } = await req.json()
+
+    const resolvedModel = getModel(model).id
+    const token = await convexAuthNextjsToken()
+    const convex = convexClient(token)
+    const grant = await convex.mutation(api.credits.consume, {
+      model: resolvedModel,
+      anonymousSessionId,
+    })
+
+    if (!grant.ok) {
+      const status = grant.reason === 'sign_in' ? 401 : 402
+      return new Response(JSON.stringify({ error: grant.reason }), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
 
     const [strudelGuide, strudelExamples, strudelSounds] = await Promise.all([
       getStrudelGuide(),
@@ -161,6 +204,8 @@ ${strudelExamples}
 Available default sounds (only use names from this catalog):
 ${strudelSounds}${currentCodeContext}${selectionContextBlock}${repairContextBlock}
 
+If the user attaches one or more images, they are log-frequency spectrograms of audio they recorded or dropped (time on X, log frequency on Y, brighter = louder). A caption may include duration and estimated BPM. Infer tempo, rhythm, pitch material, and texture from the image and generate matching Strudel. Treat "translate this to strudel" plus a spectrogram as a request to transcribe the audio.
+
 For informational questions that do not require generating music (e.g. "what synths can you use?", "how does fast() work?"), answer conversationally in plain text. Do not include a Strudel code block unless the user asks you to generate or modify music.
 
 RESPONSE FORMAT — follow this order strictly for EVERY response that includes code:
@@ -181,13 +226,29 @@ TEMPO: .cpm(n) sets cycles per minute, NOT BPM. Never pass BPM directly to .cpm(
 IMPORTANT: Never start your response with a code block. Always lead with conversational text first. Output exactly one \`\`\`strudel code block per response. The code block streams directly into the user's live editor.`
 
     const result = streamText({
-      model: openaiProvider(model),
+      model: languageModel(resolvedModel),
       messages: await convertToModelMessages(messages),
       system: systemPrompt,
       experimental_transform: smoothStream({
         delayInMs: 15,
         chunking: 'word',
       }),
+      async onFinish(event) {
+        if (grant.kind !== 'paid') return
+        const usage = event.totalUsage ?? event.usage
+        const inputTokens = usage.inputTokens ?? 0
+        const outputTokens = usage.outputTokens ?? 0
+        try {
+          await convex.mutation(api.credits.recordUsage, {
+            model: resolvedModel,
+            inputTokens,
+            outputTokens,
+            cents: estimateUsageCents(resolvedModel, inputTokens, outputTokens),
+          })
+        } catch (error) {
+          console.error('Failed to record usage', error)
+        }
+      },
     })
 
     const streamResponse = result.toUIMessageStreamResponse({

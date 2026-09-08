@@ -34,6 +34,7 @@ export const getCurrentUser = query({
       .first();
 
     return {
+      id: userId,
       name: identity.name ?? user?.name ?? null,
       email: identity.email ?? user?.email ?? null,
       image: identity.image ?? user?.image ?? null,

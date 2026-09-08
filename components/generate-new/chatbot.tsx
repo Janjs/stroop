@@ -10,7 +10,10 @@ import { useSignIn } from '@/hooks/useSignIn'
 import { useAnonymousSession } from '@/hooks/useAnonymousSession'
 import { useRouter } from 'next/navigation'
 import { Id } from '@/convex/_generated/dataModel'
-import { DEFAULT_OPENAI_MODEL } from '@/lib/models'
+import { LUNA_MODEL_ID } from '@/lib/models'
+import { useBilling } from '@/hooks/useBilling'
+import { ModelSelect } from '@/components/billing/model-select'
+import { SubscribeDialog } from '@/components/billing/subscribe-dialog'
 import { DEFAULT_CHAT_TITLE, generateChatTitle } from '@/lib/chat-title'
 import useGenerateSearchParams from '@/hooks/useGenerateSearchParams'
 import {
@@ -29,6 +32,14 @@ import {
   usePromptInputController,
   type PromptInputMessage,
 } from '@/components/ai-elements/prompt-input'
+import {
+  AudioAttachmentPreview,
+  AudioPromptButtons,
+  AudioRecordingStatusProvider,
+  useAudioRecordingStatus,
+} from '@/components/generate-new/audio-prompt-tools'
+import { filePartsToSpectrograms } from '@/lib/audio-spectrogram'
+import { takePendingAudio } from '@/lib/pending-audio'
 import { Icons } from '@/components/icons'
 import {
   Suggestions,
@@ -42,7 +53,6 @@ import {
 } from '@/components/ui/collapsible'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { ChevronDownIcon, ArrowDownIcon, XIcon } from 'lucide-react'
 import { MessageSelectionContext } from '@/components/generate-new/message-selection-context'
 
@@ -432,8 +442,11 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const { handleSignIn, isSigningIn } = useSignIn()
   const router = useRouter()
   const anonymousSessionId = useAnonymousSession()
-  const credits = useQuery(api.credits.getCredits, { anonymousSessionId: anonymousSessionId ?? undefined })
-  const useCredit = useMutation(api.credits.useCredit)
+  const usage = useBilling()
+  const [selectedModel, setSelectedModel] = useState(LUNA_MODEL_ID)
+  const [subscribeOpen, setSubscribeOpen] = useState(false)
+  const selectedModelRef = useRef(selectedModel)
+  selectedModelRef.current = usage?.canUsePaidModels ? selectedModel : LUNA_MODEL_ID
   const createChat = useMutation(api.chats.create)
   const updateChat = useMutation(api.chats.update)
 
@@ -474,7 +487,11 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       : 'skip',
   )
 
-  const { textInput } = usePromptInputController()
+  const { textInput, attachments } = usePromptInputController()
+  const { processingCount } = useAudioRecordingStatus()
+  const pendingAudioRef = useRef<ReturnType<typeof takePendingAudio>>(null)
+  const pendingAudioTakenRef = useRef(false)
+  const [isPreparingAudio, setIsPreparingAudio] = useState(false)
   const [, setPrompt] = useGenerateSearchParams()
 
   const chatRequestContextRef = useRef({
@@ -726,20 +743,29 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   useEffect(() => {
     if (chatId) return
     if (messages.length > 0) return
-
-    if (externalPrompt && externalPrompt !== lastExternalPromptRef.current && status === 'ready') {
-      lastExternalPromptRef.current = externalPrompt
-      setError(null)
-      setIsSuggestionsOpen(false)
-      void (async () => {
-        await ensureChatCreated(externalPrompt)
-        sendMessage(
-          { text: externalPrompt },
-          { body: { model: DEFAULT_OPENAI_MODEL } }
-        )
-      })()
+    if (!pendingAudioTakenRef.current) {
+      pendingAudioRef.current = takePendingAudio()
+      pendingAudioTakenRef.current = true
     }
-  }, [externalPrompt, status, sendMessage, messages.length, chatId, ensureChatCreated])
+    const pending = pendingAudioRef.current
+    const text = pending?.text || externalPrompt
+    if (!text && !pending?.files.length) return
+    if (text && text === lastExternalPromptRef.current) return
+    if (status !== 'ready' || !usage?.canGenerate) return
+
+    lastExternalPromptRef.current = text || 'translate this to strudel'
+    setError(null)
+    setIsSuggestionsOpen(false)
+    void (async () => {
+      const textToSend = text || 'translate this to strudel'
+      await ensureChatCreated(textToSend)
+      sendMessage(
+        { text: textToSend, files: pending?.files },
+        { body: { model: selectedModelRef.current, anonymousSessionId } }
+      )
+      pendingAudioRef.current = null
+    })()
+  }, [externalPrompt, status, sendMessage, messages.length, chatId, ensureChatCreated, usage?.canGenerate, anonymousSessionId])
 
   const lastHandledFixRequestIdRef = useRef<number | null>(null)
   useEffect(() => {
@@ -751,7 +777,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       { text: 'Fix the syntax error in my code' },
       {
         body: {
-          model: DEFAULT_OPENAI_MODEL,
+          model: selectedModelRef.current,
+          anonymousSessionId,
           repairContext: {
             type: 'fix',
             error: fixRequest.message,
@@ -760,7 +787,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         },
       }
     )
-  }, [fixRequest, status, sendMessage])
+  }, [fixRequest, status, sendMessage, anonymousSessionId])
 
   const lastResetKeyRef = useRef<string | null>(null)
   useEffect(() => {
@@ -872,56 +899,54 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   }
 
   const handleSubmit = async (message: PromptInputMessage) => {
-    console.log('handleSubmit called', message)
     const hasText = Boolean(message.text?.trim())
-    if (!hasText) {
-      console.log('No text in message, returning early')
-      return
-    }
+    const hasFiles = message.files.length > 0
+    if (!hasText && !hasFiles) return
 
-    if (credits === undefined) {
+    if (usage === undefined) {
       setError('Loading credits...')
       return
     }
 
-    if (!isAuthenticated && credits.credits === 0) {
-      setError('You have used all 3 free generations. Please sign in to continue.')
+    if (!usage.canGenerate) {
+      if (!isAuthenticated) {
+        setError('You have used all 3 free generations. Please sign in to continue.')
+      } else {
+        setSubscribeOpen(true)
+      }
       return
     }
 
-    if (!isAuthenticated) {
-      if (!anonymousSessionId) {
-        setError('Session not initialized. Please refresh the page.')
-        return
-      }
-      const result = await useCredit({ anonymousSessionId })
-      if (!result.success) {
-        if (result.reason === 'limit_reached') {
-          setError('You have used all 3 free generations. Please sign in to continue.')
-        } else {
-          setError('Failed to use credit. Please try again.')
-        }
-        return
-      }
-    }
-
     setError(null)
-    const textToSend = message.text || constructPrompt()
-    console.log('Sending message:', textToSend)
+    setIsPreparingAudio(true)
+    let filesToSend = message.files
+    let caption = ''
+    try {
+      if (hasFiles) {
+        const converted = await filePartsToSpectrograms(message.files)
+        filesToSend = converted.files
+        caption = converted.caption
+      }
+    } catch {
+      setIsPreparingAudio(false)
+      setError('Could not read that audio. Try wav, mp3, or m4a.')
+      return
+    }
+    setIsPreparingAudio(false)
 
-    // Update title for both anonymous and authenticated users for immediate feedback
-    // setPrompt(textToSend) // This causes a double-send because it updates the URL, triggering a re-render/re-mount loop
+    const userText = message.text?.trim() || (hasFiles ? 'translate this to strudel' : constructPrompt())
+    const textToSend = [userText, caption].filter(Boolean).join('\n\n')
+
     if (!isAuthenticated) {
-      setPrompt(textToSend)
-      // Prevent the auto-send effect from firing when the prompt prop updates via URL
-      lastExternalPromptRef.current = textToSend
+      setPrompt(userText)
+      lastExternalPromptRef.current = userText
     }
     lastSubmittedPromptRef.current = textToSend
 
     if (isAuthenticated && !chatId && !currentChatIdRef.current) {
-      await ensureChatCreated(textToSend)
+      await ensureChatCreated(userText)
     } else if (isAuthenticated && chatId && existingChat?.title === DEFAULT_CHAT_TITLE) {
-      void generateChatTitle(textToSend).then((title) => {
+      void generateChatTitle(userText).then((title) => {
         if (title !== DEFAULT_CHAT_TITLE) {
           void updateChat({ id: chatId as Id<'chats'>, title })
         }
@@ -935,11 +960,13 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     sendMessage(
       {
         text: textToSend,
+        files: filesToSend,
         metadata: selectionToSend ? { selectionContext: selectionToSend } : undefined,
       },
       {
         body: {
-          model: DEFAULT_OPENAI_MODEL,
+          model: selectedModelRef.current,
+          anonymousSessionId,
           selectionContext: selectionToSend,
         },
       }
@@ -956,8 +983,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const defaultPrompt = constructPrompt()
   const hasSelections = selectedMood || selectedGenre || selectedTempo
   const hasText = Boolean(textInput.value?.trim()) || hasSelections
-  const canSubmit = hasText && status === 'ready' && credits !== undefined && anonymousSessionId !== null && (isAuthenticated || (credits.credits ?? 0) > 0)
-  const showSignInPrompt = !isAuthenticated && credits !== undefined && credits.credits === 0
+  const hasAudio = attachments.files.length > 0
+  const canSubmit = (hasText || hasAudio) && processingCount === 0 && !isPreparingAudio && status === 'ready' && usage !== undefined && anonymousSessionId !== null && usage.canGenerate
+  const showSignInPrompt = !isAuthenticated && usage !== undefined && !usage.canGenerate
+  const showSubscribePrompt = isAuthenticated && usage !== undefined && !usage.isSubscribed && !usage.canGenerate
   const visibleMessages = messages.filter((message) => !isHiddenMessage(message))
   const isWaitingForResponse = status === 'submitted' || status === 'streaming'
   const showResponseSpacer = visibleMessages.length > 1 || isWaitingForResponse
@@ -1053,10 +1082,21 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         <Alert className="mb-4 shrink-0">
           <AlertTitle>Sign in required</AlertTitle>
           <AlertDescription className="flex items-center justify-between">
-            <span>You've used all 3 free generations. Sign in to continue generating Strudel code.</span>
+            <span>You've used all 3 free generations. Sign in to subscribe and keep generating.</span>
             <Button size="sm" onClick={handleSignIn} disabled={isSigningIn}>
               {isSigningIn && <Icons.spinner className="animate-spin" />}
               Sign In
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {showSubscribePrompt && (
+        <Alert className="mb-4 shrink-0">
+          <AlertTitle>Subscribe to keep generating</AlertTitle>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>Subscribe to keep generating with Luna, Terra, or Sol.</span>
+            <Button size="sm" onClick={() => setSubscribeOpen(true)}>
+              Subscribe
             </Button>
           </AlertDescription>
         </Alert>
@@ -1153,6 +1193,19 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                           )}
                           {(() => {
                             const renderedParts = message.parts?.map((part, i) => {
+                              if (part.type === 'file' && 'url' in part && typeof part.url === 'string') {
+                                return (
+                                  <Message key={`${message.id}-${i}`} from={message.role}>
+                                    <MessageContent>
+                                      <img
+                                        alt={('filename' in part && part.filename) || 'Audio spectrogram'}
+                                        className="max-w-full rounded-lg"
+                                        src={part.url}
+                                      />
+                                    </MessageContent>
+                                  </Message>
+                                )
+                              }
                               if (part.type === 'text' && 'text' in part) {
                                 if (!part.text.trim()) return null
                                 return (
@@ -1301,7 +1354,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         </CollapsibleContent>
       </Collapsible>
 
-      <PromptInput onSubmit={handleSubmit}>
+      <PromptInput accept="audio/*" maxFiles={3} maxFileSize={8_000_000} onSubmit={handleSubmit}>
         {selectionContext && (
           <PromptInputHeader className="px-3 pt-3">
             <div className="flex items-start gap-2">
@@ -1321,23 +1374,32 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
             </div>
           </PromptInputHeader>
         )}
+        <AudioAttachmentPreview />
         <PromptInputBody>
-          <PromptInputTextarea placeholder={defaultPrompt} />
+          <PromptInputTextarea className={hasAudio ? 'pt-1.5' : undefined} placeholder={defaultPrompt} />
         </PromptInputBody>
-        <PromptInputFooter className="flex w-full items-end justify-between">
-          {credits && !isAuthenticated && (
-            <Badge variant="secondary" className="text-xs border-0">
-              {credits.credits} / 3 free generations
-            </Badge>
-          )}
-          <div className="ml-auto">
+        <PromptInputFooter className="flex w-full items-end justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
+            <AudioPromptButtons />
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <ModelSelect
+              value={usage?.canUsePaidModels ? selectedModel : LUNA_MODEL_ID}
+              onChange={setSelectedModel}
+              canUsePaidModels={usage?.canUsePaidModels ?? false}
+              onNeedSubscribe={() => {
+                if (!isAuthenticated) handleSignIn()
+                else setSubscribeOpen(true)
+              }}
+            />
             <PromptInputSubmit
               disabled={!canSubmit || status !== 'ready'}
-              status={status}
+              status={isPreparingAudio ? 'submitted' : status}
             />
           </div>
         </PromptInputFooter>
       </PromptInput>
+      <SubscribeDialog open={subscribeOpen} onOpenChange={setSubscribeOpen} />
       </div>
     </div>
   )
@@ -1346,6 +1408,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolError, onChatCreated, fixRequest, resetKey, onToolClick, currentSnippets, getEditorContext, selectionContext, onClearSelection, saveContextRef, pendingChatNavigationRef, onChatStatusChange, mobileCodePlayerBar }: ChatbotProps) {
   return (
     <PromptInputProvider>
+      <AudioRecordingStatusProvider>
       <ChatbotContent
         prompt={prompt}
         chatId={chatId}
@@ -1364,6 +1427,7 @@ export default function Chatbot({ prompt, chatId, onSnippetsGenerated, onToolErr
         onChatStatusChange={onChatStatusChange}
         mobileCodePlayerBar={mobileCodePlayerBar}
       />
+      </AudioRecordingStatusProvider>
     </PromptInputProvider>
   )
 }

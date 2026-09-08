@@ -5,7 +5,7 @@ type SharePageProps = {
   searchParams: Promise<{ chatId?: string; title?: string }>
 }
 
-const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL || 'https://stroop.janjs.dev'
+const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL || 'https://stroop.app'
 
 export async function generateMetadata({ searchParams }: SharePageProps): Promise<Metadata> {
   const { chatId, title = 'Shared Stroop' } = await searchParams

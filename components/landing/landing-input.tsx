@@ -13,6 +13,14 @@ import {
   type PromptInputMessage,
 } from '@/components/ai-elements/prompt-input'
 import {
+  AudioAttachmentPreview,
+  AudioPromptButtons,
+  AudioRecordingStatusProvider,
+  useAudioRecordingStatus,
+} from '@/components/generate-new/audio-prompt-tools'
+import { filePartsToSpectrograms } from '@/lib/audio-spectrogram'
+import { stashPendingAudio } from '@/lib/pending-audio'
+import {
   Suggestions,
   Suggestion,
 } from '@/components/ai-elements/suggestion'
@@ -71,12 +79,14 @@ function constructPrompt(mood: string | null, genre: string | null, tempo: strin
 
 function LandingInputContent() {
   const router = useRouter()
-  const { textInput } = usePromptInputController()
+  const { textInput, attachments } = usePromptInputController()
+  const { processingCount } = useAudioRecordingStatus()
 
   const [selectedMood, setSelectedMood] = useState<string | null>(null)
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleMoodClick = (mood: string) => {
     setSelectedMood((prev) => (prev === mood ? null : mood))
@@ -93,24 +103,44 @@ function LandingInputContent() {
     textInput.setInput(prompt)
   }, [selectedMood, selectedGenre, selectedTempo])
 
-  const handleSubmit = (message: PromptInputMessage) => {
-    const text = message.text?.trim() || constructPrompt(selectedMood, selectedGenre, selectedTempo)
-    if (!text) return
+  const handleSubmit = async (message: PromptInputMessage) => {
+    const text = message.text?.trim() || constructPrompt(selectedMood, selectedGenre, selectedTempo) || (message.files.length ? 'translate this to strudel' : '')
+    if (!text && message.files.length === 0) return
+    setError(null)
     setIsSubmitting(true)
+    if (message.files.length) {
+      try {
+        const converted = await filePartsToSpectrograms(message.files)
+        stashPendingAudio({
+          text: [text, converted.caption].filter(Boolean).join('\n\n'),
+          files: converted.files,
+        })
+      } catch {
+        setIsSubmitting(false)
+        setError('Could not read that audio. Try wav, mp3, or m4a.')
+        return
+      }
+    }
     router.push(`/generate?prompt=${encodeURIComponent(text)}`)
   }
 
   const hasSelections = selectedMood || selectedGenre || selectedTempo
   const hasText = Boolean(textInput.value?.trim()) || hasSelections
+  const hasAudio = attachments.files.length > 0
 
   return (
     <div className="flex flex-col w-full max-w-xl">
-      <PromptInput onSubmit={handleSubmit} className="w-full">
+      {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
+      <PromptInput accept="audio/*" className="w-full" maxFiles={3} maxFileSize={8_000_000} onSubmit={handleSubmit}>
+        <AudioAttachmentPreview />
         <PromptInputBody>
-          <PromptInputTextarea placeholder="e.g., dreamy lo-fi beat at 90 bpm" />
+          <PromptInputTextarea className={hasAudio ? 'pt-1.5' : undefined} placeholder="e.g., dreamy lo-fi beat at 90 bpm" />
         </PromptInputBody>
-        <PromptInputFooter className="flex w-full justify-end">
-          <PromptInputSubmit disabled={!hasText || isSubmitting} status={isSubmitting ? 'submitted' : undefined} />
+        <PromptInputFooter className="flex w-full items-end justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
+            <AudioPromptButtons />
+          </div>
+          <PromptInputSubmit disabled={(!hasText && !hasAudio) || isSubmitting || processingCount > 0} status={isSubmitting ? 'submitted' : undefined} />
         </PromptInputFooter>
       </PromptInput>
 
@@ -164,7 +194,9 @@ function LandingInputContent() {
 export default function LandingInput() {
   return (
     <PromptInputProvider>
-      <LandingInputContent />
+      <AudioRecordingStatusProvider>
+        <LandingInputContent />
+      </AudioRecordingStatusProvider>
     </PromptInputProvider>
   )
 }

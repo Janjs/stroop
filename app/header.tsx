@@ -11,6 +11,7 @@ export default function Header() {
   const { isAuthenticated, isLoading } = useConvexAuth()
   const pathname = usePathname()
   const isLandingPage = pathname === '/'
+  const isLegalPage = pathname.startsWith('/legal')
 
   if (pathname === '/generate') {
     return null
@@ -35,7 +36,7 @@ export default function Header() {
       >
         <div className="flex items-center gap-3 min-w-0">
           {showMobileSidebarTrigger && <SidebarTrigger className="md:hidden" />}
-          {!isLoading && !isAuthenticated && isLandingPage && (
+          {!isLoading && !isAuthenticated && (isLandingPage || isLegalPage) && (
             <Link href="/" className="flex items-center gap-2 mr-4">
               <div className="flex aspect-square items-center justify-center">
                 <Icons.logo className="size-6.5" />

@@ -7,7 +7,7 @@ import { AppLayout } from '@/components/app-layout'
 import { themeInitScript } from '@/lib/theme-script'
 
 export const metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://stroop.janjs.dev'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://stroop.app'),
   title: 'stroop',
   description: 'Strudel Code Generator',
   content: 'width=device-width, initial-scale=1',

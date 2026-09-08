@@ -7,6 +7,14 @@ export default defineSchema({
   userCredits: defineTable({
     userId: v.string(),
     credits: v.number(),
+    trialGranted: v.optional(v.boolean()),
+    paywallSeen: v.optional(v.boolean()),
+    usedCents: v.optional(v.number()),
+    periodStart: v.optional(v.number()),
+    periodEnd: v.optional(v.number()),
+    subscriptionStatus: v.optional(v.string()),
+    polarCustomerId: v.optional(v.string()),
+    polarSubscriptionId: v.optional(v.string()),
   }).index("by_userId", ["userId"]),
   anonymousUsers: defineTable({
     sessionId: v.string(),

@@ -50,11 +50,19 @@ export default function About({ variant = 'default' }: AboutProps) {
           </p>
         </div>
         <p className="text-sm text-muted-foreground">
-          💻 Made by
-          <a href={TWITTER_LINK} target="_blank" className="mb-10 underline underline-offset-4">
+          Made by
+          <a href={TWITTER_LINK} target="_blank" className="underline underline-offset-4">
             {' '}
-            @Janjs.
+            @Janjs
           </a>
+          . Source is AGPL-3.0.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          <a href="/legal/privacy" className="underline-offset-4 hover:underline">Privacy</a>
+          {' · '}
+          <a href="/legal/terms" className="underline-offset-4 hover:underline">Terms</a>
+          {' · '}
+          <a href="/legal/refunds" className="underline-offset-4 hover:underline">Refunds</a>
         </p>
         <AlertDialogFooter>
           <div className="hidden sm:flex">

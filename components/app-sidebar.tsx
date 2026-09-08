@@ -95,7 +95,7 @@ export function AppSidebar() {
     return () => window.clearTimeout(timeoutId)
   }, [chats])
 
-  if (!isAuthenticated && pathname === '/') {
+  if (!isAuthenticated && (pathname === '/' || pathname.startsWith('/legal'))) {
     return null
   }
 

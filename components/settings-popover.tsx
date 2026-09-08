@@ -5,16 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Icons } from '@/components/icons'
 import { useTheme } from 'next-themes'
 import { Separator } from '@/components/ui/separator'
-import { Badge } from '@/components/ui/badge'
-import { useQuery } from 'convex/react'
-import { api } from '@/convex/_generated/api'
-import { useAnonymousSession } from '@/hooks/useAnonymousSession'
 import About from '@/components/about'
 
 export default function SettingsPopover() {
   const { theme, setTheme } = useTheme()
-  const anonymousSessionId = useAnonymousSession()
-  const credits = useQuery(api.credits.getCredits, { anonymousSessionId: anonymousSessionId ?? undefined })
 
   return (
     <Popover>
@@ -62,18 +56,6 @@ export default function SettingsPopover() {
           </div>
           <Separator />
           <div className="p-1">
-            <div className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm w-full">
-              <Icons.credits className="h-4 w-4" />
-              <span>Credits</span>
-              {credits && (
-                <Badge variant="outline" className="ml-auto text-xs">
-                  {credits.isAuthenticated 
-                    ? credits.credits?.toFixed(2) ?? '0.00'
-                    : `${credits.credits} / 3`
-                  }
-                </Badge>
-              )}
-            </div>
             <About />
           </div>
         </div>

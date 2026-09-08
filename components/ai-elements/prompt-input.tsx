@@ -399,6 +399,13 @@ export const PromptInput = ({
         .filter(Boolean);
 
       return patterns.some((pattern) => {
+        if (pattern === "audio/*") {
+          return (
+            f.type.startsWith("audio/") ||
+            (!f.type &&
+              /\.(wav|wave|mp3|m4a|aac|ogg|oga|webm|flac|aiff?)$/i.test(f.name))
+          );
+        }
         if (pattern.endsWith("/*")) {
           const prefix = pattern.slice(0, -1); // e.g: image/* -> image/
           return f.type.startsWith(prefix);
