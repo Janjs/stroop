@@ -42,6 +42,7 @@ export default defineSchema({
       })
     ),
     snippets: v.optional(v.any()),
+    model: v.optional(v.string()),
     sharedAt: v.optional(v.number()),
     sharedBy: v.optional(v.string()),
     sharedCode: v.optional(v.string()),

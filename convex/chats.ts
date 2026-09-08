@@ -100,22 +100,22 @@ export const create = mutation({
       })
     ),
     snippets: v.optional(v.any()),
-    sessionId: v.optional(v.string()),
+    model: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
 
-    if (!userId && !args.sessionId) {
-      throw new Error("Not authenticated and no session ID provided");
+    if (!userId) {
+      throw new Error("Not authenticated");
     }
 
     const now = Date.now();
     const chatId = await ctx.db.insert("chats", {
-      userId: userId ?? undefined,
-      sessionId: args.sessionId,
+      userId,
       title: args.title,
       messages: args.messages,
       snippets: args.snippets,
+      model: args.model,
       createdAt: now,
       updatedAt: now,
     });
@@ -141,6 +141,7 @@ export const update = mutation({
       )
     ),
     snippets: v.optional(v.any()),
+    model: v.optional(v.string()),
     pinned: v.optional(v.boolean()),
     sessionId: v.optional(v.string()),
   },
@@ -158,6 +159,7 @@ export const update = mutation({
     if (args.title !== undefined) updates.title = args.title;
     if (args.messages !== undefined) updates.messages = args.messages;
     if (args.snippets !== undefined) updates.snippets = args.snippets;
+    if (args.model !== undefined) updates.model = args.model;
     if (args.pinned !== undefined) updates.pinned = args.pinned;
 
     if (args.messages !== undefined || args.snippets !== undefined) {

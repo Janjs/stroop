@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Music, RefreshCw, Unlock } from 'lucide-react'
 import { useAuthActions } from '@convex-dev/auth/react'
+import { useConvexAuth } from 'convex/react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -27,11 +28,17 @@ type SubscribeDialogProps = {
 }
 
 export function SubscribeDialog({ open, onOpenChange, required }: SubscribeDialogProps) {
-  const { signOut } = useAuthActions()
+  const { isAuthenticated } = useConvexAuth()
+  const { signIn, signOut } = useAuthActions()
   const [isStarting, setIsStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const startCheckout = async () => {
+    if (!isAuthenticated) {
+      setIsStarting(true)
+      void signIn('google', { redirectTo: window.location.pathname + window.location.search })
+      return
+    }
     setIsStarting(true)
     setError(null)
     try {

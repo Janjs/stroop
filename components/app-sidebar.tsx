@@ -141,7 +141,7 @@ export function AppSidebar() {
           key={chat._id}
           chatId={chat._id}
           title={chat.title}
-          href={`/generate?chatId=${chat._id}&title=${encodeURIComponent(chat.title)}`}
+          href={`/generate?${new URLSearchParams({ chatId: chat._id, title: chat.title, ...(chat.model ? { model: chat.model } : {}) }).toString()}`}
           isActive={currentChatId === chat._id}
           isPinned={chat.pinned ?? false}
           isAnimating={animatingChatIds.has(chat._id)}
@@ -156,17 +156,20 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="gap-2">
         <SidebarMenu>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
             <SidebarMenuButton
               asChild
               size="lg"
               className="data-[state=open]:bg-muted data-[state=open]:text-foreground"
             >
-              <Link href="/" className="flex min-h-12 items-center gap-2">
+              <Link
+                href="/"
+                className="flex min-h-12 items-center gap-2 group-data-[collapsible=icon]:min-h-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+              >
                 <div className="flex aspect-square items-center justify-center">
-                  <Icons.logo className="size-6.5" />
+                  <Icons.logo className="size-6.5 group-data-[collapsible=icon]:size-5" />
                 </div>
-                <span className="text-xl font-outfit">Stroop</span>
+                <span className="text-xl font-outfit group-data-[collapsible=icon]:hidden">Stroop</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

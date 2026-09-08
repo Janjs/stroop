@@ -8,12 +8,13 @@ import { useQuery, useMutation, useConvexAuth } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { useSignIn } from '@/hooks/useSignIn'
 import { useAnonymousSession } from '@/hooks/useAnonymousSession'
-import { useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Id } from '@/convex/_generated/dataModel'
-import { LUNA_MODEL_ID } from '@/lib/models'
+import { LUNA_MODEL_ID, knownModelId } from '@/lib/models'
 import { useBilling } from '@/hooks/useBilling'
 import { ModelSelect } from '@/components/billing/model-select'
 import { SubscribeDialog } from '@/components/billing/subscribe-dialog'
+import { FreeGens } from '@/components/billing/usage-meter'
 import { DEFAULT_CHAT_TITLE, generateChatTitle } from '@/lib/chat-title'
 import useGenerateSearchParams from '@/hooks/useGenerateSearchParams'
 import {
@@ -363,6 +364,7 @@ export type ChatSaveMessage = {
 
 export type ChatSaveContext = {
   getMessages: () => ChatSaveMessage[]
+  getModel: () => string
 }
 
 function serializeChatMessages(messages: any[]): ChatSaveMessage[] {
@@ -440,13 +442,24 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
   const { isAuthenticated } = useConvexAuth()
   const { handleSignIn, isSigningIn } = useSignIn()
-  const router = useRouter()
+  const searchParams = useSearchParams()
   const anonymousSessionId = useAnonymousSession()
   const usage = useBilling()
-  const [selectedModel, setSelectedModel] = useState(LUNA_MODEL_ID)
+  const existingChat = useQuery(
+    api.chats.get,
+    chatId && (isAuthenticated || anonymousSessionId)
+      ? { id: chatId as Id<'chats'>, sessionId: anonymousSessionId ?? undefined }
+      : 'skip',
+  )
+  const [modelOverride, setModelOverride] = useState<{ chatId: string | null, model: string } | null>(null)
+  const scopedOverride = modelOverride?.chatId === (chatId ?? null) ? modelOverride.model : null
+  const activeModel = knownModelId(scopedOverride)
+    ?? (existingChat ? knownModelId(existingChat.model) : null)
+    ?? knownModelId(searchParams.get('model'))
+    ?? LUNA_MODEL_ID
   const [subscribeOpen, setSubscribeOpen] = useState(false)
-  const selectedModelRef = useRef(selectedModel)
-  selectedModelRef.current = usage?.canUsePaidModels ? selectedModel : LUNA_MODEL_ID
+  const selectedModelRef = useRef(activeModel)
+  selectedModelRef.current = usage?.canUsePaidModels ? activeModel : LUNA_MODEL_ID
   const createChat = useMutation(api.chats.create)
   const updateChat = useMutation(api.chats.update)
 
@@ -461,13 +474,15 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
         title: DEFAULT_CHAT_TITLE,
         messages: [],
         snippets: [],
+        model: selectedModelRef.current,
       })
 
       pendingNavigationChatIdRef.current = newChatId
       currentChatIdRef.current = newChatId
       lastSavedMessagesLengthRef.current = 0
       onChatCreated?.(newChatId)
-      router.replace(`/generate?chatId=${newChatId}`, { scroll: false })
+      const params = new URLSearchParams({ chatId: newChatId, model: selectedModelRef.current })
+      window.history.replaceState(null, '', `/generate?${params.toString()}`)
 
       void generateChatTitle(userText).then((title) => {
         if (currentChatIdRef.current === newChatId && title !== DEFAULT_CHAT_TITLE) {
@@ -479,13 +494,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     } finally {
       isCreatingChatRef.current = false
     }
-  }, [isAuthenticated, chatId, createChat, updateChat, onChatCreated, router])
-  const existingChat = useQuery(
-    api.chats.get,
-    chatId && (isAuthenticated || anonymousSessionId)
-      ? { id: chatId as Id<'chats'>, sessionId: anonymousSessionId ?? undefined }
-      : 'skip',
-  )
+  }, [isAuthenticated, chatId, createChat, updateChat, onChatCreated])
 
   const { textInput, attachments } = usePromptInputController()
   const { processingCount } = useAudioRecordingStatus()
@@ -577,6 +586,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     if (!saveContextRef) return
     saveContextRef.current = {
       getMessages: () => serializeChatMessages(messagesRef.current),
+      getModel: () => selectedModelRef.current,
     }
   }, [saveContextRef, messages])
 
@@ -843,6 +853,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
             id: currentChatIdRef.current as Id<'chats'>,
             messages: messagesToSave,
             snippets: snippets,
+            model: selectedModelRef.current,
           })
         }
         // Creation is handled when the first message is submitted
@@ -1383,15 +1394,15 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
             <AudioPromptButtons />
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <ModelSelect
-              value={usage?.canUsePaidModels ? selectedModel : LUNA_MODEL_ID}
-              onChange={setSelectedModel}
-              canUsePaidModels={usage?.canUsePaidModels ?? false}
-              onNeedSubscribe={() => {
-                if (!isAuthenticated) handleSignIn()
-                else setSubscribeOpen(true)
-              }}
-            />
+            {usage && <FreeGens usage={usage} onClick={() => setSubscribeOpen(true)} />}
+            {isAuthenticated && (
+              <ModelSelect
+                value={usage?.canUsePaidModels ? activeModel : LUNA_MODEL_ID}
+                onChange={(model) => setModelOverride({ chatId: chatId ?? null, model })}
+                canUsePaidModels={usage?.canUsePaidModels ?? false}
+                onNeedSubscribe={() => setSubscribeOpen(true)}
+              />
+            )}
             <PromptInputSubmit
               disabled={!canSubmit || status !== 'ready'}
               status={isPreparingAudio ? 'submitted' : status}

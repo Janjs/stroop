@@ -641,10 +641,7 @@ ${tokenRules}
     }
 
     if (!chatId) {
-      if (!onEnsureChat) {
-        throw new Error('Sign in to save your code to a new chat')
-      }
-      await onEnsureChat(normalizedCode)
+      await onEnsureChat?.(normalizedCode)
       currentEditorCodeRef.current = normalizedCode
       lastSavedCodeRef.current = normalizedCode
       setHasUnsavedChanges(false)

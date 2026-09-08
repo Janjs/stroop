@@ -7,7 +7,9 @@ import { DEFAULT_OPENAI_MODEL, estimateUsageCents, getModel } from '@/lib/models
 import { readFile } from 'fs/promises'
 import path from 'path'
 
-export const maxDuration = 30
+export const maxDuration = 60
+
+const MAX_OUTPUT_TOKENS = 4096
 
 let strudelGuideCache: string | null = null
 let strudelExamplesCache: string | null = null
@@ -127,19 +129,32 @@ async function getStrudelApiReference(): Promise<string> {
 
 function languageModel(modelId: string) {
   const spec = getModel(modelId)
-  if (process.env.OPENROUTER_API_KEY) {
-    const openrouter = createOpenAI({
-      apiKey: process.env.OPENROUTER_API_KEY,
-      baseURL: 'https://openrouter.ai/api/v1',
-      headers: {
-        'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://stroop.app',
-        'X-Title': 'Stroop',
-      },
-    })
-    return openrouter(spec.openrouter)
+  if ('openai' in spec && spec.openai && process.env.OPENAI_API_KEY) {
+    return openaiProvider(spec.openai)
   }
-  if (!('openai' in spec) || !spec.openai) throw new Error('This model needs OPENROUTER_API_KEY')
-  return openaiProvider(spec.openai)
+  if (!process.env.OPENROUTER_API_KEY) throw new Error('This model needs OPENROUTER_API_KEY')
+  const openrouter = createOpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: 'https://openrouter.ai/api/v1',
+    headers: {
+      'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://stroop.app',
+      'X-Title': 'Stroop',
+    },
+    fetch: async (url, init) => {
+      if (typeof init?.body === 'string') {
+        const body = JSON.parse(init.body)
+        if (body.max_tokens == null) {
+          body.max_tokens = body.max_completion_tokens ?? MAX_OUTPUT_TOKENS
+        }
+        if (body.reasoning == null) {
+          body.reasoning = { exclude: true }
+        }
+        init = { ...init, body: JSON.stringify(body) }
+      }
+      return fetch(url, init)
+    },
+  })
+  return openrouter.chat(spec.openrouter)
 }
 
 function convexClient(token?: string) {
@@ -149,6 +164,7 @@ function convexClient(token?: string) {
 }
 
 export async function POST(req: Request) {
+  let refundSession: string | undefined
   try {
     const {
       messages,
@@ -181,6 +197,7 @@ export async function POST(req: Request) {
         headers: { 'Content-Type': 'application/json' },
       })
     }
+    if (grant.kind === 'free') refundSession = anonymousSessionId
 
     const [strudelGuide, strudelExamples, strudelSounds] = await Promise.all([
       getStrudelGuide(),
@@ -230,10 +247,17 @@ IMPORTANT: Never start your response with a code block. Always lead with convers
       model: languageModel(resolvedModel),
       messages: await convertToModelMessages(messages),
       system: systemPrompt,
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
       experimental_transform: smoothStream({
         delayInMs: 15,
         chunking: 'word',
       }),
+      async onError({ error }) {
+        console.error('Chat stream error:', error)
+        if (!refundSession) return
+        await convex.mutation(api.credits.refundFree, { anonymousSessionId: refundSession })
+        refundSession = undefined
+      },
       async onFinish(event) {
         if (grant.kind !== 'paid') return
         const usage = event.totalUsage ?? event.usage
@@ -255,11 +279,19 @@ IMPORTANT: Never start your response with a code block. Always lead with convers
     const streamResponse = result.toUIMessageStreamResponse({
       sendSources: true,
       sendReasoning: true,
+      getErrorMessage: (error) => {
+        const message = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
+        if (/credits|max_tokens/i.test(message)) return 'This model is out of provider credits. Try Luna.'
+        return message || 'An error occurred.'
+      },
     })
 
     return streamResponse
   } catch (error: any) {
     console.error('Chat API error:', error)
+    if (refundSession) {
+      await convexClient().mutation(api.credits.refundFree, { anonymousSessionId: refundSession })
+    }
     return new Response(
       JSON.stringify({
         error: error.message || 'An error occurred while processing your request.',

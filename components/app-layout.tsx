@@ -20,7 +20,7 @@ export function AppLayout({ children, defaultOpenFromCookie, hasSavedPreference 
     return <div className="min-h-svh bg-background" aria-busy="true" />
   }
 
-  const defaultOpen = hasSavedPreference ? defaultOpenFromCookie : isAuthenticated
+  const defaultOpen = isAuthenticated && (hasSavedPreference ? defaultOpenFromCookie : true)
 
   return (
     <AppSidebarProvider

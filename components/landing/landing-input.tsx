@@ -27,6 +27,12 @@ import {
 import { Label } from '@/components/ui/label'
 import { applyMoodBackground, GENRES, MOODS } from '@/lib/prompt-suggestions'
 import { TEMPO_LABELS } from '@/lib/tempo-suggestions'
+import { useConvexAuth } from 'convex/react'
+import { useBilling } from '@/hooks/useBilling'
+import { ModelSelect } from '@/components/billing/model-select'
+import { SubscribeDialog } from '@/components/billing/subscribe-dialog'
+import { FreeGens } from '@/components/billing/usage-meter'
+import { LUNA_MODEL_ID } from '@/lib/models'
 
 function SuggestionsWithFade({ children, className }: { children: React.ReactNode; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -81,10 +87,14 @@ function LandingInputContent() {
   const router = useRouter()
   const { textInput, attachments } = usePromptInputController()
   const { processingCount } = useAudioRecordingStatus()
+  const { isAuthenticated } = useConvexAuth()
+  const usage = useBilling()
 
   const [selectedMood, setSelectedMood] = useState<string | null>(null)
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null)
   const [selectedTempo, setSelectedTempo] = useState<string | null>(null)
+  const [selectedModel, setSelectedModel] = useState(LUNA_MODEL_ID)
+  const [subscribeOpen, setSubscribeOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -121,7 +131,8 @@ function LandingInputContent() {
         return
       }
     }
-    router.push(`/generate?prompt=${encodeURIComponent(text)}`)
+    const params = new URLSearchParams({ prompt: text, model: usage?.canUsePaidModels ? selectedModel : LUNA_MODEL_ID })
+    router.push(`/generate?${params.toString()}`)
   }
 
   const hasSelections = selectedMood || selectedGenre || selectedTempo
@@ -140,9 +151,21 @@ function LandingInputContent() {
           <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
             <AudioPromptButtons />
           </div>
-          <PromptInputSubmit disabled={(!hasText && !hasAudio) || isSubmitting || processingCount > 0} status={isSubmitting ? 'submitted' : undefined} />
+          <div className="ml-auto flex items-center gap-2">
+            {usage && <FreeGens usage={usage} onClick={() => setSubscribeOpen(true)} />}
+            {isAuthenticated && (
+              <ModelSelect
+                value={usage?.canUsePaidModels ? selectedModel : LUNA_MODEL_ID}
+                onChange={setSelectedModel}
+                canUsePaidModels={usage?.canUsePaidModels ?? false}
+                onNeedSubscribe={() => setSubscribeOpen(true)}
+              />
+            )}
+            <PromptInputSubmit disabled={(!hasText && !hasAudio) || isSubmitting || processingCount > 0} status={isSubmitting ? 'submitted' : undefined} />
+          </div>
         </PromptInputFooter>
       </PromptInput>
+      <SubscribeDialog open={subscribeOpen} onOpenChange={setSubscribeOpen} />
 
       <div className="mt-4 space-y-1">
         <Label className="mb-3 text-xs text-muted-foreground">Mood</Label>

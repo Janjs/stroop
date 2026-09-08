@@ -4,7 +4,7 @@ export const MODELS = [
   {
     id: LUNA_MODEL_ID,
     name: 'Luna',
-    hint: 'Fast',
+    provider: 'openai',
     openrouter: 'openai/gpt-5.6-luna',
     openai: 'gpt-5.6-luna',
     inputPerM: 0.2,
@@ -14,7 +14,7 @@ export const MODELS = [
   {
     id: 'gpt-5.6-terra',
     name: 'Terra',
-    hint: 'Better quality',
+    provider: 'openai',
     openrouter: 'openai/gpt-5.6-terra',
     openai: 'gpt-5.6-terra',
     inputPerM: 2,
@@ -24,7 +24,7 @@ export const MODELS = [
   {
     id: 'gpt-5.6-sol',
     name: 'Sol',
-    hint: 'Best quality',
+    provider: 'openai',
     openrouter: 'openai/gpt-5.6-sol',
     openai: 'gpt-5.6-sol',
     inputPerM: 4,
@@ -34,7 +34,7 @@ export const MODELS = [
   {
     id: 'claude-haiku-4.5',
     name: 'Haiku',
-    hint: 'Claude · Fast',
+    provider: 'anthropic',
     openrouter: 'anthropic/claude-haiku-4.5',
     inputPerM: 1,
     outputPerM: 5,
@@ -43,7 +43,7 @@ export const MODELS = [
   {
     id: 'claude-sonnet-5',
     name: 'Sonnet',
-    hint: 'Claude · Quality',
+    provider: 'anthropic',
     openrouter: 'anthropic/claude-sonnet-5',
     inputPerM: 2,
     outputPerM: 10,
@@ -52,7 +52,7 @@ export const MODELS = [
   {
     id: 'claude-opus-5',
     name: 'Opus',
-    hint: 'Claude · Best',
+    provider: 'anthropic',
     openrouter: 'anthropic/claude-opus-5',
     inputPerM: 5,
     outputPerM: 25,
@@ -61,7 +61,7 @@ export const MODELS = [
   {
     id: 'grok-4.6',
     name: 'Grok',
-    hint: 'xAI · Fast',
+    provider: 'xai',
     openrouter: 'x-ai/grok-4.6',
     inputPerM: 2,
     outputPerM: 6,
@@ -70,7 +70,7 @@ export const MODELS = [
   {
     id: 'kimi-k3',
     name: 'Kimi',
-    hint: 'Moonshot · Quality',
+    provider: 'moonshotai',
     openrouter: 'moonshotai/kimi-k3',
     inputPerM: 3,
     outputPerM: 15,
@@ -86,6 +86,11 @@ export const SUBSCRIPTION_PRICE = 5
 
 export function getModel(id: string) {
   return MODELS.find((model) => model.id === id) ?? MODELS[0]
+}
+
+export function knownModelId(id: string | null | undefined) {
+  if (!id) return null
+  return MODELS.some((model) => model.id === id) ? id : null
 }
 
 export function isPaidModel(id: string) {

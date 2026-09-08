@@ -1,13 +1,12 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { EditorSelectionContext, StrudelSnippet } from '@/types/types'
 import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Icons } from '@/components/icons'
 import Chatbot, { type ChatSaveContext } from '@/components/generate-new/chatbot'
 import { ChatTitleLabel } from '@/components/chat-title-label'
-import { useSearchParams } from 'next/navigation'
 import { useIsMobile } from '@/hooks/use-mobile'
 import StrudelCodeViewer, { type StrudelCodeViewerHandle, type StrudelPlayerState } from '@/components/strudel/strudel-code-viewer'
 import { MobileCodePlayerBar } from '@/components/generate-new/mobile-code-player-bar'
@@ -41,7 +40,6 @@ const GenerateContent = () => {
   const [selectionContext, setSelectionContext] = useState<EditorSelectionContext | null>(null)
   const editorRef = useRef<StrudelCodeViewerHandle>(null)
   const searchParams = useSearchParams()
-  const router = useRouter()
   const isMobile = useIsMobile()
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [isTitleHovered, setIsTitleHovered] = useState(false)
@@ -58,7 +56,9 @@ const GenerateContent = () => {
   const [isChatAnimating, setIsChatAnimating] = useState(false)
 
   const prompt = searchParams.get('prompt') || undefined
-  const chatId = searchParams.get('chatId') || undefined
+  const urlChatId = searchParams.get('chatId') || undefined
+  const [createdChatId, setCreatedChatId] = useState<string>()
+  const chatId = urlChatId || createdChatId
   const title = searchParams.get('title') || undefined
   const { isAuthenticated } = useConvexAuth()
   const anonymousSessionId = useAnonymousSession()
@@ -108,6 +108,7 @@ const GenerateContent = () => {
         setSelectionContext(null)
         if (isReset) {
           setEditorSessionKey(`editor-${Date.now()}`)
+          setCreatedChatId(undefined)
         }
       }
     } else {
@@ -230,23 +231,21 @@ const GenerateContent = () => {
 
   const handleChatCreated = useCallback((id: string) => {
     createdChatIdRef.current = id
+    setCreatedChatId(id)
   }, [])
 
   const handleEnsureChatForSave = useCallback(async (code: string) => {
-    if (chatId) return
-
-    if (!isAuthenticated && !anonymousSessionId) {
-      throw new Error('Sign in to save your code to a new chat')
-    }
+    if (chatId || !isAuthenticated) return
 
     const messages = chatSaveContextRef.current?.getMessages() ?? []
+    const model = chatSaveContextRef.current?.getModel()
     const snippet = { ...(snippets[0] ?? {}), code }
 
     const newChatId = await createChat({
       title: DEFAULT_CHAT_TITLE,
       messages,
       snippets: [snippet],
-      sessionId: anonymousSessionId ?? undefined,
+      model,
     })
 
     pendingChatNavigationRef.current = newChatId
@@ -256,18 +255,19 @@ const GenerateContent = () => {
     setPersistedCode(code)
     setSnippets([snippet])
     hydratedChatSnippetsRef.current = true
-    router.replace(`/generate?chatId=${newChatId}`, { scroll: false })
+    const params = new URLSearchParams({ chatId: newChatId })
+    if (model) params.set('model', model)
+    window.history.replaceState(null, '', `/generate?${params.toString()}`)
 
     void generateChatTitleFromCode(code).then((title) => {
       if (title !== DEFAULT_CHAT_TITLE) {
         void updateChat({
           id: newChatId as Id<'chats'>,
           title,
-          sessionId: anonymousSessionId ?? undefined,
         })
       }
     })
-  }, [chatId, isAuthenticated, anonymousSessionId, snippets, createChat, updateChat, router, handleChatCreated])
+  }, [chatId, isAuthenticated, snippets, createChat, updateChat, handleChatCreated])
 
   const handleClearSelection = useCallback(() => {
     setSelectionContext(null)
