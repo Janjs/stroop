@@ -1091,10 +1091,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       )}
       {showSignInPrompt && (
         <Alert className="mb-4 shrink-0">
-          <AlertTitle>Sign in required</AlertTitle>
-          <AlertDescription className="flex items-center justify-between">
+          <AlertTitle className="mb-2">Sign in required</AlertTitle>
+          <AlertDescription className="flex items-center justify-between gap-3">
             <span>You've used all 3 free generations. Sign in to subscribe and keep generating.</span>
-            <Button size="sm" onClick={handleSignIn} disabled={isSigningIn}>
+            <Button size="sm" className="shrink-0" onClick={handleSignIn} disabled={isSigningIn}>
               {isSigningIn && <Icons.spinner className="animate-spin" />}
               Sign In
             </Button>
@@ -1103,10 +1103,10 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
       )}
       {showSubscribePrompt && (
         <Alert className="mb-4 shrink-0">
-          <AlertTitle>Subscribe to keep generating</AlertTitle>
+          <AlertTitle className="mb-2">Subscribe to keep generating</AlertTitle>
           <AlertDescription className="flex items-center justify-between gap-3">
             <span>Subscribe to keep generating.</span>
-            <Button size="sm" onClick={() => setSubscribeOpen(true)}>
+            <Button size="sm" className="shrink-0" onClick={() => setSubscribeOpen(true)}>
               Subscribe
             </Button>
           </AlertDescription>
