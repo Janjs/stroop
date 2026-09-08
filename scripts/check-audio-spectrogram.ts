@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { analyzeSamples } from '../lib/audio-spectrogram.ts'
+import { analyzeSamples, isAudioFilePart } from '../lib/audio-spectrogram.ts'
 
 const sampleRate = 44100
 const seconds = 1
@@ -22,4 +22,8 @@ for (let beat = 0; beat < 4; beat++) {
 }
 const pulsed = analyzeSamples(pulses, sampleRate)
 assert.ok(pulsed.bpm !== null && Math.abs(pulsed.bpm - 120) <= 8, `expected ~120 BPM, got ${pulsed.bpm}`)
+assert.equal(isAudioFilePart({ type: 'file', mediaType: 'audio/wav' }), true)
+assert.equal(isAudioFilePart({ type: 'file', mediaType: 'image/png', filename: 'tone.wav' }), false)
+assert.equal(isAudioFilePart({ type: 'file', filename: 'groove.mp3' }), true)
+assert.equal(isAudioFilePart({ type: 'text' }), false)
 console.log('ok', { peakHz: analysis.peakHz, durationSec: analysis.durationSec, bpm: pulsed.bpm })

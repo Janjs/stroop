@@ -5,7 +5,7 @@ import { PromptInputButton, PromptInputTools, usePromptInputAttachments } from '
 import { AudioRecorderButton } from './audio-recorder-button'
 
 export { AudioRecorderButton } from './audio-recorder-button'
-export { AudioAttachmentPreview } from './audio-attachment-preview'
+export { AudioAttachmentPreview, MessageAudioRecordings } from './audio-attachment-preview'
 export { AudioRecordingStatusProvider, useAudioRecordingStatus } from './audio-recording-status'
 
 export function AudioPromptButtons() {

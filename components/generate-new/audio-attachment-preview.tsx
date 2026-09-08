@@ -118,6 +118,44 @@ function AudioRecordingChipLoading({
   )
 }
 
+export function MessageAudioRecordings({
+  items,
+}: {
+  items: { url: string; id?: string }[]
+}) {
+  const [playingId, setPlayingId] = useState<string | null>(null)
+  const playable = items.filter((item) => item.url)
+  if (playable.length === 0) return null
+
+  return (
+    <div className="ml-auto flex max-w-full justify-end gap-1.5">
+      {playable.map((item, index) => {
+        const id = item.id ?? `${item.url}-${index}`
+        return (
+          <AudioRecordingPlayer
+            key={id}
+            url={item.url}
+            id={id}
+            playingId={playingId}
+            className="w-44"
+            onTogglePlay={(audio) => {
+              if (playingId === id) {
+                audio.pause()
+                setPlayingId(null)
+                return
+              }
+              audio.onended = () => setPlayingId(null)
+              void audio.play()
+              setPlayingId(id)
+            }}
+            onPlayEnded={() => setPlayingId(null)}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 function AudioRecordingPlayer({
   url,
   id,

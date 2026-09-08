@@ -278,6 +278,13 @@ async function blobFromFilePart(file: FileUIPart) {
   return response.blob()
 }
 
+export function isAudioFilePart(part: { type?: string; mediaType?: string; filename?: string }) {
+  if (part.type !== 'file') return false
+  if (part.mediaType?.startsWith('audio/')) return true
+  if (part.mediaType?.startsWith('image/')) return false
+  return /\.(wav|wave|mp3|m4a|aac|ogg|oga|webm|flac|aiff?)$/i.test(part.filename ?? '')
+}
+
 export async function filePartsToSpectrograms(files: FileUIPart[]) {
   const out: FileUIPart[] = []
   const captions: string[] = []
@@ -292,4 +299,33 @@ export async function filePartsToSpectrograms(files: FileUIPart[]) {
     captions.push(converted.caption)
   }
   return { files: out, caption: captions.join(' ') }
+}
+
+export async function replaceAudioPartsWithSpectrograms<T extends { role?: string; parts?: any[] }>(messages: T[]): Promise<T[]> {
+  return Promise.all(messages.map(async (message) => {
+    if (message.role !== 'user' || !message.parts) return message
+    const audioParts = message.parts.filter((part) => isAudioFilePart(part))
+    if (audioParts.length === 0) return message
+
+    const converted = await filePartsToSpectrograms(audioParts)
+    const parts: any[] = []
+    let captionInserted = false
+    for (const part of message.parts) {
+      if (isAudioFilePart(part)) continue
+      if (part?.type === 'text' && !captionInserted) {
+        parts.push({
+          ...part,
+          text: converted.caption ? `${part.text}\n\n${converted.caption}` : part.text,
+        })
+        captionInserted = true
+        continue
+      }
+      parts.push(part)
+    }
+    parts.push(...converted.files)
+    if (!captionInserted && converted.caption) {
+      parts.unshift({ type: 'text', text: converted.caption })
+    }
+    return { ...message, parts }
+  }))
 }

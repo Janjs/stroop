@@ -3,19 +3,14 @@ export type PendingAudioPayload = {
   files: { type: 'file'; mediaType: string; url: string; filename?: string }[]
 }
 
-const KEY = 'stroop-pending-audio'
+let pending: PendingAudioPayload | null = null
 
 export function stashPendingAudio(payload: PendingAudioPayload) {
-  sessionStorage.setItem(KEY, JSON.stringify(payload))
+  pending = payload
 }
 
 export function takePendingAudio(): PendingAudioPayload | null {
-  const raw = sessionStorage.getItem(KEY)
-  if (!raw) return null
-  sessionStorage.removeItem(KEY)
-  try {
-    return JSON.parse(raw) as PendingAudioPayload
-  } catch {
-    return null
-  }
+  const value = pending
+  pending = null
+  return value
 }

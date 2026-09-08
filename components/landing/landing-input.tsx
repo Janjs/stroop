@@ -18,7 +18,6 @@ import {
   AudioRecordingStatusProvider,
   useAudioRecordingStatus,
 } from '@/components/generate-new/audio-prompt-tools'
-import { filePartsToSpectrograms } from '@/lib/audio-spectrogram'
 import { stashPendingAudio } from '@/lib/pending-audio'
 import {
   Suggestions,
@@ -119,17 +118,7 @@ function LandingInputContent() {
     setError(null)
     setIsSubmitting(true)
     if (message.files.length) {
-      try {
-        const converted = await filePartsToSpectrograms(message.files)
-        stashPendingAudio({
-          text: [text, converted.caption].filter(Boolean).join('\n\n'),
-          files: converted.files,
-        })
-      } catch {
-        setIsSubmitting(false)
-        setError('Could not read that audio. Try wav, mp3, or m4a.')
-        return
-      }
+      stashPendingAudio({ text, files: message.files })
     }
     const params = new URLSearchParams({ prompt: text, model: usage?.canUsePaidModels ? selectedModel : LUNA_MODEL_ID })
     router.push(`/generate?${params.toString()}`)

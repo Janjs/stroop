@@ -37,9 +37,10 @@ import {
   AudioAttachmentPreview,
   AudioPromptButtons,
   AudioRecordingStatusProvider,
+  MessageAudioRecordings,
   useAudioRecordingStatus,
 } from '@/components/generate-new/audio-prompt-tools'
-import { filePartsToSpectrograms } from '@/lib/audio-spectrogram'
+import { isAudioFilePart, replaceAudioPartsWithSpectrograms } from '@/lib/audio-spectrogram'
 import { takePendingAudio } from '@/lib/pending-audio'
 import { Icons } from '@/components/icons'
 import {
@@ -500,7 +501,6 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const { processingCount } = useAudioRecordingStatus()
   const pendingAudioRef = useRef<ReturnType<typeof takePendingAudio>>(null)
   const pendingAudioTakenRef = useRef(false)
-  const [isPreparingAudio, setIsPreparingAudio] = useState(false)
   const [, setPrompt] = useGenerateSearchParams()
 
   const chatRequestContextRef = useRef({
@@ -515,7 +515,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     () =>
       new DefaultChatTransport({
         api: '/api/chat',
-        prepareSendMessagesRequest: ({ messages, body }) => {
+        prepareSendMessagesRequest: async ({ messages, body }) => {
           const editorContext = chatRequestContextRef.current.getEditorContext?.()
           const bodyRecord = body as {
             currentCode?: string
@@ -549,7 +549,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
               ...body,
               currentCode: currentCode || undefined,
               selectionContext,
-              messages: stripStrudelCodeFromMessages(messages),
+              messages: await replaceAudioPartsWithSpectrograms(stripStrudelCodeFromMessages(messages)),
             },
           }
         },
@@ -929,30 +929,14 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
     }
 
     setError(null)
-    setIsPreparingAudio(true)
-    let filesToSend = message.files
-    let caption = ''
-    try {
-      if (hasFiles) {
-        const converted = await filePartsToSpectrograms(message.files)
-        filesToSend = converted.files
-        caption = converted.caption
-      }
-    } catch {
-      setIsPreparingAudio(false)
-      setError('Could not read that audio. Try wav, mp3, or m4a.')
-      return
-    }
-    setIsPreparingAudio(false)
 
     const userText = message.text?.trim() || (hasFiles ? 'translate this to strudel' : constructPrompt())
-    const textToSend = [userText, caption].filter(Boolean).join('\n\n')
 
     if (!isAuthenticated) {
       setPrompt(userText)
       lastExternalPromptRef.current = userText
     }
-    lastSubmittedPromptRef.current = textToSend
+    lastSubmittedPromptRef.current = userText
 
     if (isAuthenticated && !chatId && !currentChatIdRef.current) {
       await ensureChatCreated(userText)
@@ -970,8 +954,8 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
 
     sendMessage(
       {
-        text: textToSend,
-        files: filesToSend,
+        text: userText,
+        files: message.files,
         metadata: selectionToSend ? { selectionContext: selectionToSend } : undefined,
       },
       {
@@ -995,7 +979,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
   const hasSelections = selectedMood || selectedGenre || selectedTempo
   const hasText = Boolean(textInput.value?.trim()) || hasSelections
   const hasAudio = attachments.files.length > 0
-  const canSubmit = (hasText || hasAudio) && processingCount === 0 && !isPreparingAudio && status === 'ready' && usage !== undefined && anonymousSessionId !== null && usage.canGenerate
+  const canSubmit = (hasText || hasAudio) && processingCount === 0 && status === 'ready' && usage !== undefined && anonymousSessionId !== null && usage.canGenerate
   const showSignInPrompt = !isAuthenticated && usage !== undefined && !usage.canGenerate
   const showSubscribePrompt = isAuthenticated && usage !== undefined && !usage.isSubscribed && !usage.canGenerate
   const visibleMessages = messages.filter((message) => !isHiddenMessage(message))
@@ -1203,20 +1187,13 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                             </Message>
                           )}
                           {(() => {
+                            const audioItems = message.role === 'user'
+                              ? (message.parts ?? [])
+                                .filter((part: any) => isAudioFilePart(part) && part.url)
+                                .map((part: any, index: number) => ({ url: part.url as string, id: `${message.id}-audio-${index}` }))
+                              : []
                             const renderedParts = message.parts?.map((part, i) => {
-                              if (part.type === 'file' && 'url' in part && typeof part.url === 'string') {
-                                return (
-                                  <Message key={`${message.id}-${i}`} from={message.role}>
-                                    <MessageContent>
-                                      <img
-                                        alt={('filename' in part && part.filename) || 'Audio spectrogram'}
-                                        className="max-w-full rounded-lg"
-                                        src={part.url}
-                                      />
-                                    </MessageContent>
-                                  </Message>
-                                )
-                              }
+                              if (part.type === 'file') return null
                               if (part.type === 'text' && 'text' in part) {
                                 if (!part.text.trim()) return null
                                 return (
@@ -1264,21 +1241,33 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
                             })
 
                             if (renderedParts?.some(Boolean)) {
-                              return renderedParts
+                              return (
+                                <>
+                                  {audioItems.length > 0 && <MessageAudioRecordings items={audioItems} />}
+                                  {renderedParts}
+                                </>
+                              )
                             }
 
                             if (!showWaitingIndicator && before.trim()) {
                               return (
-                                <Message from={message.role}>
-                                  <MessageContent>
-                                    {message.role === 'user' ? (
-                                      <UserMessageText message={message} text={before} />
-                                    ) : (
-                                      <MessageResponse>{before}</MessageResponse>
-                                    )}
-                                  </MessageContent>
-                                </Message>
+                                <>
+                                  {audioItems.length > 0 && <MessageAudioRecordings items={audioItems} />}
+                                  <Message from={message.role}>
+                                    <MessageContent>
+                                      {message.role === 'user' ? (
+                                        <UserMessageText message={message} text={before} />
+                                      ) : (
+                                        <MessageResponse>{before}</MessageResponse>
+                                      )}
+                                    </MessageContent>
+                                  </Message>
+                                </>
                               )
+                            }
+
+                            if (audioItems.length > 0) {
+                              return <MessageAudioRecordings items={audioItems} />
                             }
 
                             return renderedParts ?? null
@@ -1405,7 +1394,7 @@ function ChatbotContent({ prompt: externalPrompt, chatId, onSnippetsGenerated, o
             )}
             <PromptInputSubmit
               disabled={!canSubmit || status !== 'ready'}
-              status={isPreparingAudio ? 'submitted' : status}
+              status={status}
             />
           </div>
         </PromptInputFooter>
