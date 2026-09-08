@@ -147,7 +147,9 @@ function languageModel(modelId: string) {
           body.max_tokens = body.max_completion_tokens ?? MAX_OUTPUT_TOKENS
         }
         if (body.reasoning == null) {
-          body.reasoning = { exclude: true }
+          body.reasoning = spec.provider === 'moonshotai'
+            ? { effort: 'none', exclude: true }
+            : { exclude: true }
         }
         init = { ...init, body: JSON.stringify(body) }
       }
