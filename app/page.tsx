@@ -30,7 +30,7 @@ const Page = () => {
                 <Icons.chordwiseMascot className="h-4 w-4 shrink-0" />
               </Badge>
             </Link>
-            <h1 className="landing-title max-w-2xl font-outfit text-[clamp(2.6rem,6vw,5.2rem)] font-semibold leading-[0.96] tracking-[-0.045em]">
+            <h1 className="landing-title max-w-2xl font-outfit text-[clamp(2.2rem,5vw,4.2rem)] font-semibold leading-[0.96] tracking-[-0.045em]">
               <span>Create music with playable </span>
               <a href="https://strudel.cc/" target="_blank" rel="noopener noreferrer" className="group relative underline underline-offset-4 decoration-foreground/30 transition-colors hover:decoration-foreground">
                 Strudel
