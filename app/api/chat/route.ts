@@ -279,7 +279,7 @@ IMPORTANT: Never start your response with a code block. Always lead with convers
     const streamResponse = result.toUIMessageStreamResponse({
       sendSources: true,
       sendReasoning: true,
-      getErrorMessage: (error) => {
+      onError: (error) => {
         const message = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
         if (/credits|max_tokens/i.test(message)) return 'This model is out of provider credits. Try Luna.'
         return message || 'An error occurred.'
