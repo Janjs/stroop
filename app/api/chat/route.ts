@@ -149,6 +149,8 @@ function languageModel(modelId: string) {
         if (body.reasoning == null) {
           body.reasoning = spec.provider === 'moonshotai'
             ? { effort: 'none', exclude: true }
+            : spec.provider === 'xai'
+              ? { effort: 'low', exclude: true }
             : { exclude: true }
         }
         init = { ...init, body: JSON.stringify(body) }
