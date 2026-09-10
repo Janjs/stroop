@@ -52,6 +52,7 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_userId_updatedAt", ["userId", "updatedAt"])
+    .index("by_userId_pinned", ["userId", "pinned"])
     .index("by_sessionId", ["sessionId"])
     .index("by_sessionId_updatedAt", ["sessionId", "updatedAt"]),
 });

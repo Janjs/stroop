@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { PlusIcon, PanelLeftIcon } from 'lucide-react'
-import { useMutation, useConvexAuth, usePaginatedQuery } from 'convex/react'
+import { useMutation, useConvexAuth, usePaginatedQuery, useQuery } from 'convex/react'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
@@ -47,6 +47,7 @@ export function AppSidebar() {
     isAuthenticated ? {} : 'skip',
     { initialNumItems: 20 }
   )
+  const pinnedChats = useQuery(api.chats.listPinned, isAuthenticated ? {} : 'skip')
   const removeChat = useMutation(api.chats.remove)
   const createChat = useMutation(api.chats.create)
   const isCreatingChatRef = useRef(false)
@@ -55,9 +56,8 @@ export function AppSidebar() {
 
   const currentChatId = searchParams.get('chatId')
 
-  const favouriteChats = chats
-    ? [...chats]
-        .filter((chat) => chat.pinned)
+  const favouriteChats = pinnedChats
+    ? [...pinnedChats]
         .sort((a, b) => b.updatedAt - a.updatedAt)
     : []
 

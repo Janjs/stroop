@@ -31,6 +31,22 @@ export const list = query({
   },
 });
 
+export const listPinned = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    return await ctx.db
+      .query("chats")
+      .withIndex("by_userId_pinned", (q) =>
+        q.eq("userId", userId).eq("pinned", true)
+      )
+      .order("desc")
+      .collect();
+  },
+});
+
 export const get = query({
   args: { id: v.id("chats"), sessionId: v.optional(v.string()) },
   handler: async (ctx, args) => {
