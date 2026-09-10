@@ -105,6 +105,7 @@ export const makeShareable = mutation({
 export const create = mutation({
   args: {
     title: v.string(),
+    sessionId: v.optional(v.string()),
     messages: v.array(
       v.object({
         id: v.string(),
@@ -121,13 +122,11 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
 
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    if (!userId && !args.sessionId) throw new Error("Not authenticated");
 
     const now = Date.now();
     const chatId = await ctx.db.insert("chats", {
-      userId,
+      ...(userId ? { userId } : { sessionId: args.sessionId }),
       title: args.title,
       messages: args.messages,
       snippets: args.snippets,

@@ -63,7 +63,7 @@ interface StrudelCodeViewerProps {
   onFixInChat?: (message: string, code: string) => void
   onAddSelectionToContext?: (selection: EditorSelectionContext) => void
   onCodeSaved?: (code: string) => void
-  onEnsureChat?: (code: string) => Promise<void>
+  onEnsureChat?: (code: string) => Promise<string | undefined>
   resetKey?: string | null
   chatId?: string
   shareTitle?: string
@@ -749,17 +749,19 @@ ${tokenRules}
   }
 
   const handleShare = async () => {
-    if (!activeSnippet?.code || !chatId) return
+    if (!activeSnippet?.code) return
     try {
       const currentCode = getCurrentEditorCode()
       currentEditorCodeRef.current = currentCode
+      const shareChatId = chatId ?? await onEnsureChat?.(currentCode)
+      if (!shareChatId) return
       await makeShareable({
-        id: chatId as Id<'chats'>,
+        id: shareChatId as Id<'chats'>,
         code: currentCode,
         sessionId: anonymousSessionId ?? undefined,
       })
       const shareUrl = new URL('/generate/share', window.location.origin)
-      shareUrl.searchParams.set('chatId', chatId)
+      shareUrl.searchParams.set('chatId', shareChatId)
       shareUrl.searchParams.set('title', shareTitle || activeSnippet.title || 'Shared Stroop')
       const shareData = { title: shareTitle || activeSnippet.title || 'Stroop output', url: shareUrl.toString() }
       if (navigator.share) {
@@ -921,11 +923,10 @@ ${tokenRules}
           <p className="text-xs leading-relaxed text-muted-foreground">
             Making this chat shareable will share the generated Strudel code. Your conversation stays private.
           </p>
-          <Button className="w-full rounded-full" onClick={handleShare} disabled={!chatId}>
+          <Button className="w-full rounded-full" onClick={handleShare} disabled={!chatId && !onEnsureChat}>
             {hasShared ? <Check /> : <Share2 />}
             {hasShared ? 'Link copied' : 'Share output'}
           </Button>
-          {!chatId && <p className="text-center text-xs text-muted-foreground">Save this chat before sharing it.</p>}
         </DialogContent>
       </Dialog>
     </div>

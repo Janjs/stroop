@@ -235,7 +235,8 @@ const GenerateContent = () => {
   }, [])
 
   const handleEnsureChatForSave = useCallback(async (code: string) => {
-    if (chatId || !isAuthenticated) return
+    if (chatId) return chatId
+    if (!isAuthenticated && !anonymousSessionId) return
 
     const messages = chatSaveContextRef.current?.getMessages() ?? []
     const model = chatSaveContextRef.current?.getModel()
@@ -243,6 +244,7 @@ const GenerateContent = () => {
 
     const newChatId = await createChat({
       title: DEFAULT_CHAT_TITLE,
+      sessionId: isAuthenticated ? undefined : anonymousSessionId ?? undefined,
       messages,
       snippets: [snippet],
       model,
@@ -264,10 +266,12 @@ const GenerateContent = () => {
         void updateChat({
           id: newChatId as Id<'chats'>,
           title,
+          sessionId: isAuthenticated ? undefined : anonymousSessionId ?? undefined,
         })
       }
     })
-  }, [chatId, isAuthenticated, snippets, createChat, updateChat, handleChatCreated])
+    return newChatId
+  }, [chatId, isAuthenticated, anonymousSessionId, snippets, createChat, updateChat, handleChatCreated])
 
   const handleClearSelection = useCallback(() => {
     setSelectionContext(null)
