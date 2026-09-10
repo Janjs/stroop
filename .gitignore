@@ -26,3 +26,6 @@ temp/
 Thumbs.db
 
 docs/strudel-doc.json
+
+tsconfig.tsbuildinfo
+public/backgrounds/clouds-8bit.png
