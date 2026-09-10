@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 import { PanelLeft } from "lucide-react"
@@ -12,9 +13,10 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
-  SheetContent,
   SheetDescription,
   SheetHeader,
+  SheetOverlay,
+  SheetPortal,
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -200,24 +202,26 @@ const Sidebar = React.forwardRef<
 
     if (isMobile) {
       return (
-        <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
-          <SheetContent
-            data-sidebar="sidebar"
-            data-mobile="true"
-            className="w-[--sidebar-width] bg-background p-0 text-foreground [&>button]:hidden"
-            style={
-              {
-                "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
-              } as React.CSSProperties
-            }
-            side={side}
-          >
-            <SheetHeader className="sr-only">
-              <SheetTitle>Sidebar</SheetTitle>
-              <SheetDescription>Displays the mobile sidebar.</SheetDescription>
-            </SheetHeader>
-            <div className="flex h-full w-full flex-col">{children}</div>
-          </SheetContent>
+        <Sheet open={openMobile} onOpenChange={setOpenMobile}>
+          <SheetPortal>
+            <SheetOverlay />
+            <SheetPrimitive.Content
+              data-sidebar="sidebar"
+              data-mobile="true"
+              className={cn(
+                "fixed inset-y-0 z-50 flex h-full w-[min(18rem,85vw)] flex-col border-r bg-background p-0 text-foreground shadow-lg outline-none",
+                side === "right" ? "right-0 border-l border-r-0" : "left-0",
+              )}
+            >
+              <SheetHeader className="sr-only">
+                <SheetTitle>Sidebar</SheetTitle>
+                <SheetDescription>Displays the mobile sidebar.</SheetDescription>
+              </SheetHeader>
+              <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+                {children}
+              </div>
+            </SheetPrimitive.Content>
+          </SheetPortal>
         </Sheet>
       )
     }
@@ -281,7 +285,7 @@ const SidebarTrigger = React.forwardRef<
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn("h-7 w-7", className)}
+      className={className}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()

@@ -152,6 +152,8 @@ export function AppSidebar() {
     </SidebarMenu>
   )
 
+  const showSidebarContent = isMobile || !isCollapsed
+
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="gap-2">
@@ -175,19 +177,21 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <SidebarMenuButton onClick={toggleSidebar}>
-                  <PanelLeftIcon className="size-3.5" />
-                  <span>{isCollapsed ? 'Expand' : 'Collapse'}</span>
-                </SidebarMenuButton>
-              </TooltipTrigger>
-              <TooltipContent side="right" hidden={!isCollapsed || isMobile}>
-                {isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-              </TooltipContent>
-            </Tooltip>
-          </SidebarMenuItem>
+          {!isMobile && (
+            <SidebarMenuItem>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SidebarMenuButton onClick={toggleSidebar}>
+                    <PanelLeftIcon className="size-3.5" />
+                    <span>{isCollapsed ? 'Expand' : 'Collapse'}</span>
+                  </SidebarMenuButton>
+                </TooltipTrigger>
+                <TooltipContent side="right" hidden={!isCollapsed}>
+                  {isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+                </TooltipContent>
+              </Tooltip>
+            </SidebarMenuItem>
+          )}
           <SidebarMenuItem>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -204,7 +208,7 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      {isAuthenticated && (isMobile || !isCollapsed) && (
+      {isAuthenticated && showSidebarContent && (
         <SidebarContent>
           {favouriteChats.length > 0 && (
             <SidebarGroup>
@@ -229,7 +233,7 @@ export function AppSidebar() {
           )}
         </SidebarContent>
       )}
-      {!isAuthenticated && (isMobile || !isCollapsed) && (
+      {!isAuthenticated && showSidebarContent && (
         <SidebarContent className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-3 px-4 text-center">
             <p className="text-xs text-muted-foreground">

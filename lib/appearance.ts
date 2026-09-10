@@ -32,14 +32,14 @@ export function applyBackground(id: string, options?: { animate?: boolean; origi
 
 export const PANEL_OPACITY_KEY = 'panelOpacity'
 export const DEFAULT_PANEL_OPACITY = 85
-export const DEFAULT_STRUDEL_OPACITY = 50
+export const DEFAULT_STRUDEL_OPACITY = 90
 export const MIN_PANEL_OPACITY = 50
 export const MAX_PANEL_OPACITY = 100
 const STRUDEL_OPACITY_RATIO = DEFAULT_STRUDEL_OPACITY / DEFAULT_PANEL_OPACITY
 const MIN_STRUDEL_OPACITY = 12
 
 export function strudelOpacityFromChrome(chromeOpacity: number) {
-  return Math.max(MIN_STRUDEL_OPACITY, Math.round(chromeOpacity * STRUDEL_OPACITY_RATIO))
+  return Math.min(100, Math.max(MIN_STRUDEL_OPACITY, Math.round(chromeOpacity * STRUDEL_OPACITY_RATIO)))
 }
 
 export function clampPanelOpacity(value: number) {

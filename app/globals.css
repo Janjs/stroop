@@ -156,7 +156,7 @@
   --sidebar-ring: oklch(0.5 0.08 195);
   --app-chrome-opacity: 85%;
   --app-chat-opacity: 85%;
-  --app-strudel-opacity: 50%;
+  --app-strudel-opacity: 90%;
   --app-chrome-blur: blur(8px) saturate(120%);
   --app-strudel-blur: blur(4px) saturate(110%);
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
@@ -220,7 +220,7 @@
   --sidebar-ring: oklch(0.72 0.07 195);
   --app-chrome-opacity: 85%;
   --app-chat-opacity: 85%;
-  --app-strudel-opacity: 50%;
+  --app-strudel-opacity: 90%;
   --app-chrome-blur: blur(8px) saturate(120%);
   --app-strudel-blur: blur(4px) saturate(110%);
   --radius: 0.875rem;
@@ -727,16 +727,28 @@ html[data-background="clouds"] [data-bg-reveal]::after {
 }
 
 html[data-background="forest"] .landing-title,
-html[data-background="dusk"] .landing-title {
+html[data-background="dusk"] .landing-title,
+html[data-background="forest"] .landing-subtitle,
+html[data-background="dusk"] .landing-subtitle {
   text-shadow:
     0 1px 1px oklch(0.12 0 0 / 0.55),
     0 0 16px oklch(0.12 0 0 / 0.45);
 }
 
-[data-sidebar="sidebar"] {
+[data-sidebar="sidebar"]:not([data-mobile="true"]) {
   position: relative;
   background-color: color-mix(in oklab, var(--background) var(--app-chrome-opacity), transparent);
   backdrop-filter: var(--app-chrome-blur);
+}
+
+[data-sidebar="sidebar"][data-mobile="true"] {
+  position: fixed;
+  background-color: var(--background);
+  backdrop-filter: none;
+}
+
+[data-sidebar="sidebar"][data-mobile="true"]::before {
+  content: none;
 }
 
 .generate-chat-panel {
@@ -750,13 +762,13 @@ html[data-background="dusk"] .landing-title {
   backdrop-filter: var(--app-strudel-blur);
 }
 
-html:not([data-background="none"]) [data-sidebar="sidebar"],
+html:not([data-background="none"]) [data-sidebar="sidebar"]:not([data-mobile="true"]),
 html:not([data-background="none"]) .generate-chat-panel,
 html:not([data-background="none"]) .generate-strudel-panel {
   isolation: isolate;
 }
 
-html:not([data-background="none"]) [data-sidebar="sidebar"]::before,
+html:not([data-background="none"]) [data-sidebar="sidebar"]:not([data-mobile="true"])::before,
 html:not([data-background="none"]) .generate-chat-panel::before,
 html:not([data-background="none"]) .generate-strudel-panel::before {
   content: "";
@@ -770,11 +782,15 @@ html:not([data-background="none"]) .generate-strudel-panel::before {
   opacity: 0.55;
 }
 
-html[data-background="clouds"] [data-sidebar="sidebar"]::before,
+html[data-background="clouds"] [data-sidebar="sidebar"]:not([data-mobile="true"])::before,
 html[data-background="clouds"] .generate-chat-panel::before,
 html[data-background="clouds"] .generate-strudel-panel::before {
   mix-blend-mode: multiply;
   opacity: 0.5;
+}
+
+html:not([data-background="none"]) .generate-strudel-panel::before {
+  content: none;
 }
 
 [data-slot="resizable-panel-group"][data-panel-animating] > [data-panel] {
@@ -788,15 +804,6 @@ html[data-background="clouds"] .generate-strudel-panel::before {
 }
 
 button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
-
-.strudel-main-editor strudel-editor + div .cm-editor,
-.strudel-main-editor strudel-editor + div .cm-scroller {
-  background-color: transparent !important;
-}
-
-.strudel-main-editor strudel-editor + div .cm-gutters {
-  background-color: transparent !important;
-}
 
 @media (prefers-reduced-transparency: reduce) {
   [class*="backdrop-blur"] { backdrop-filter: none !important; }
