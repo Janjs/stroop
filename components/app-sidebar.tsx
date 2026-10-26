@@ -193,17 +193,24 @@ export function AppSidebar() {
             </SidebarMenuItem>
           )}
           <SidebarMenuItem>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <SidebarMenuButton onClick={handleNewChat}>
-                  <PlusIcon className="size-3.5" />
-                  <span>New Chat</span>
-                </SidebarMenuButton>
-              </TooltipTrigger>
-              <TooltipContent side="right" hidden={!isCollapsed || isMobile}>
-                New Chat
-              </TooltipContent>
-            </Tooltip>
+            {isMobile ? (
+              <SidebarMenuButton onClick={handleNewChat}>
+                <PlusIcon className="size-3.5" />
+                <span>New Chat</span>
+              </SidebarMenuButton>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SidebarMenuButton onClick={handleNewChat}>
+                    <PlusIcon className="size-3.5" />
+                    <span>New Chat</span>
+                  </SidebarMenuButton>
+                </TooltipTrigger>
+                <TooltipContent side="right" hidden={!isCollapsed}>
+                  New Chat
+                </TooltipContent>
+              </Tooltip>
+            )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
