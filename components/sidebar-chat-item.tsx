@@ -7,6 +7,7 @@ import { useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { Id } from '@/convex/_generated/dataModel'
 import { cn } from '@/lib/utils'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { ChatTitleLabel } from '@/components/chat-title-label'
 import {
   SidebarMenuAction,
@@ -50,6 +51,7 @@ export function SidebarChatItem({
   onDelete,
   onNavigate,
 }: SidebarChatItemProps) {
+  const isMobile = useIsMobile()
   const updateChat = useMutation(api.chats.update)
   const [isHovered, setIsHovered] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -73,7 +75,7 @@ export function SidebarChatItem({
     await updateChat({ id: chatId, pinned: !isPinned })
   }
 
-  const showActions = isHovered || isMenuOpen
+  const showActions = isMobile || isHovered || isMenuOpen
 
   return (
     <>
@@ -81,8 +83,8 @@ export function SidebarChatItem({
         className={cn(
           isAnimating && 'animate-in fade-in-0 slide-in-from-top-2 duration-300'
         )}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseEnter={() => !isMobile && setIsHovered(true)}
+        onMouseLeave={() => !isMobile && setIsHovered(false)}
       >
         <SidebarMenuButton
           asChild
@@ -99,7 +101,10 @@ export function SidebarChatItem({
         </SidebarMenuButton>
 
         <SidebarMenuAction
-          className={cn('right-5', showActions ? 'opacity-100' : 'opacity-0')}
+          className={cn(
+            'right-5',
+            showActions ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          )}
           onClick={(e) => void handleTogglePin(e)}
         >
           <HeartIcon className={cn('size-3.5', isPinned && 'fill-current')} />
@@ -109,7 +114,9 @@ export function SidebarChatItem({
         <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
           <DropdownMenuTrigger asChild>
             <SidebarMenuAction
-              className={showActions ? 'opacity-100' : 'opacity-0'}
+              className={
+                showActions ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              }
               onClick={(e) => e.preventDefault()}
             >
               <MoreVerticalIcon className="size-3.5" />
